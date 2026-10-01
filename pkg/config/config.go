@@ -20,6 +20,10 @@ const (
 	LegacyConfigFile = "config.yaml"
 	// DefaultServerPort is the default port for the web server
 	DefaultServerPort = 8080
+	// DefaultStackedListHeight is the TUI list pane height in the stacked layout.
+	DefaultStackedListHeight = 15
+	// MinStackedListHeight keeps the border and a few rows of the stacked list visible.
+	MinStackedListHeight = 5
 )
 
 // DefaultStatuses defines the hardcoded status configuration.
@@ -156,6 +160,14 @@ type ServerConfig struct {
 	CORSOrigins []string `yaml:"cors_origins,omitempty"`
 }
 
+// TUIConfig defines settings for the terminal UI.
+type TUIConfig struct {
+	// StackedListHeight is the list pane height in terminal rows, border
+	// included, when the preview is shown below the list.
+	// Default: 15. Values below 5 are raised to 5.
+	StackedListHeight int `yaml:"stacked_list_height,omitempty"`
+}
+
 // Config holds the beans configuration.
 // Note: Statuses are no longer stored in config - they are hardcoded like types.
 type Config struct {
@@ -164,6 +176,7 @@ type Config struct {
 	Worktree WorktreeConfig `yaml:"worktree,omitempty"`
 	Agent    AgentConfig    `yaml:"agent,omitempty"`
 	Server   ServerConfig   `yaml:"server,omitempty"`
+	TUI      TUIConfig      `yaml:"tui,omitempty"`
 
 	// configDir is the directory containing the config file (not serialized)
 	// Used to resolve relative paths
@@ -462,6 +475,14 @@ func (c *Config) toYAMLNode() *yaml.Node {
 		serverMapping.Content = append(serverMapping.Content, portKey, intNode(c.Server.Port))
 	}
 
+	// Build the tui mapping
+	tuiMapping := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+	if c.TUI.StackedListHeight != 0 {
+		key := strNode("stacked_list_height")
+		key.HeadComment = "List height in rows when the preview is shown below the list (default: 15)"
+		tuiMapping.Content = append(tuiMapping.Content, key, intNode(c.TUI.StackedListHeight))
+	}
+
 	// Build the top-level mapping
 	topMapping := &yaml.Node{
 		Kind:        yaml.MappingNode,
@@ -484,6 +505,10 @@ func (c *Config) toYAMLNode() *yaml.Node {
 
 	if len(serverMapping.Content) > 0 {
 		topMapping.Content = append(topMapping.Content, strNode("server"), serverMapping)
+	}
+
+	if len(tuiMapping.Content) > 0 {
+		topMapping.Content = append(topMapping.Content, strNode("tui"), tuiMapping)
 	}
 
 	// Wrap in a document node
@@ -817,4 +842,12 @@ func (c *Config) GetCORSOrigins() []string {
 		return c.Server.CORSOrigins
 	}
 	return []string{"http://localhost:*", "http://127.0.0.1:*"}
+}
+
+// GetStackedListHeight returns the TUI list pane height for the stacked layout.
+func (c *Config) GetStackedListHeight() int {
+	if c.TUI.StackedListHeight == 0 {
+		return DefaultStackedListHeight
+	}
+	return max(c.TUI.StackedListHeight, MinStackedListHeight)
 }

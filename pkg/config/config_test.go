@@ -1439,6 +1439,57 @@ func TestGetWorktreeFetchTimeout(t *testing.T) {
 	})
 }
 
+func TestGetStackedListHeight(t *testing.T) {
+	tests := []struct {
+		name       string
+		configured int
+		want       int
+	}{
+		{"unset uses default", 0, DefaultStackedListHeight},
+		{"custom value", 25, 25},
+		{"minimum kept", MinStackedListHeight, MinStackedListHeight},
+		{"too small is raised", 2, MinStackedListHeight},
+		{"negative is raised", -3, MinStackedListHeight},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := Default()
+			cfg.TUI.StackedListHeight = tt.configured
+			if got := cfg.GetStackedListHeight(); got != tt.want {
+				t.Errorf("GetStackedListHeight() = %d, want %d", got, tt.want)
+			}
+		})
+	}
+
+	t.Run("loads from config file and survives save", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, ConfigFileName)
+		configContent := "beans:\n  prefix: test-\ntui:\n  stacked_list_height: 22\n"
+		if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+			t.Fatalf("WriteFile error = %v", err)
+		}
+
+		cfg, err := Load(configPath)
+		if err != nil {
+			t.Fatalf("Load() error = %v", err)
+		}
+		if got := cfg.GetStackedListHeight(); got != 22 {
+			t.Errorf("GetStackedListHeight() = %d, want 22", got)
+		}
+
+		if err := cfg.Save(tmpDir); err != nil {
+			t.Fatalf("Save() error = %v", err)
+		}
+		reloaded, err := Load(configPath)
+		if err != nil {
+			t.Fatalf("Load() after Save error = %v", err)
+		}
+		if got := reloaded.GetStackedListHeight(); got != 22 {
+			t.Errorf("GetStackedListHeight() after Save = %d, want 22", got)
+		}
+	})
+}
+
 func TestGetServerPort(t *testing.T) {
 	t.Run("returns default when not configured", func(t *testing.T) {
 		cfg := Default()

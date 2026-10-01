@@ -31,7 +31,7 @@ func TestListRowsFitPane(t *testing.T) {
 			m := newListModel(nil, config.Default())
 			m, _ = m.Update(tea.WindowSizeMsg{Width: width, Height: 40})
 			m, _ = m.Update(beansLoadedMsg{items: items, idColWidth: 9 + 2 + 2})
-			out := ansi.Strip(m.ViewConstrained(width, StackedListHeight))
+			out := ansi.Strip(m.ViewConstrained(width, config.DefaultStackedListHeight))
 
 			for _, line := range strings.Split(out, "\n") {
 				if got := lipgloss.Width(line); got != width {

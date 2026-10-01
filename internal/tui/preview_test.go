@@ -197,26 +197,34 @@ func TestStackedLayout(t *testing.T) {
 		{Bean: longBodyBean(50), Matched: true},
 		{Bean: &bean.Bean{ID: "beans-0002", Title: "B", Status: "todo", Type: "task"}, Matched: true},
 	}
+	defaultMin := config.DefaultStackedListHeight + StackedBelowListMinHeight
 
 	tests := []struct {
 		name          string
+		listHeight    int // configured tui.stacked_list_height; 0 keeps the default
 		width, height int
 		wantPreview   bool
 	}{
-		{"narrow and tall", 100, StackedMinHeight, true},
-		{"narrow and short", 100, StackedMinHeight - 1, false},
-		{"just below two-column width", TwoColumnMinWidth - 1, 50, true},
-		{"two-column preview would shrink", TwoColumnFullWidth - 1, StackedMinHeight, true},
+		{"narrow and tall", 0, 100, defaultMin, true},
+		{"narrow and short", 0, 100, defaultMin - 1, false},
+		{"just below two-column width", 0, TwoColumnMinWidth - 1, 50, true},
+		{"two-column preview would shrink", 0, TwoColumnFullWidth - 1, defaultMin, true},
+		{"configured taller list", 25, 100, 25 + StackedBelowListMinHeight, true},
+		{"configured taller list, too short", 25, 100, 25 + StackedBelowListMinHeight - 1, false},
+		{"configured shorter list", 8, 100, 8 + StackedBelowListMinHeight, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			a := New(nil, config.Default())
+			cfg := config.Default()
+			cfg.TUI.StackedListHeight = tt.listHeight
+			listHeight := cfg.GetStackedListHeight()
+			a := New(nil, cfg)
 			a.Update(tea.WindowSizeMsg{Width: tt.width, Height: tt.height})
 			a.Update(beansLoadedMsg{items: items, idColWidth: 12})
 			view := ansi.Strip(a.View())
 			lines := strings.Split(view, "\n")
 
-			gotPreview := strings.Contains(strings.Join(lines[min(StackedListHeight, len(lines)):], "\n"), "item 00")
+			gotPreview := strings.Contains(strings.Join(lines[min(listHeight, len(lines)):], "\n"), "item 00")
 			if gotPreview != tt.wantPreview {
 				t.Fatalf("preview below list = %v, want %v\n%s", gotPreview, tt.wantPreview, view)
 			}
@@ -230,18 +238,18 @@ func TestStackedLayout(t *testing.T) {
 			if got := lipgloss.Width(strings.Join(lines[:len(lines)-1], "\n")); got > tt.width {
 				t.Errorf("panes width = %d, want <= %d", got, tt.width)
 			}
-			if got := lipgloss.Width(lines[StackedListHeight]); got != min(tt.width, StackedPreviewMaxWidth) {
+			if got := lipgloss.Width(lines[listHeight]); got != min(tt.width, StackedPreviewMaxWidth) {
 				t.Errorf("preview width = %d, want %d", got, min(tt.width, StackedPreviewMaxWidth))
 			}
 
 			wheel := func(y int) {
 				a.Update(tea.MouseMsg{X: 5, Y: y, Action: tea.MouseActionPress, Button: tea.MouseButtonWheelDown})
 			}
-			wheel(StackedListHeight - 1)
+			wheel(listHeight - 1)
 			if a.preview.scroll != 0 {
 				t.Errorf("wheel over list: preview scroll = %d, want 0", a.preview.scroll)
 			}
-			wheel(StackedListHeight)
+			wheel(listHeight)
 			if a.preview.scroll != previewScrollStep {
 				t.Errorf("wheel over preview: scroll = %d, want %d", a.preview.scroll, previewScrollStep)
 			}
@@ -250,21 +258,23 @@ func TestStackedLayout(t *testing.T) {
 }
 
 func TestLayoutSelection(t *testing.T) {
+	stackedMin := config.DefaultStackedListHeight + StackedBelowListMinHeight
 	tests := []struct {
 		name          string
 		width, height int
 		wantTwoColumn bool
 		wantStacked   bool
 	}{
-		{"wide", TwoColumnFullWidth, StackedMinHeight, true, false},
-		{"preview would shrink, tall", TwoColumnFullWidth - 1, StackedMinHeight, false, true},
-		{"preview would shrink, short", TwoColumnFullWidth - 1, StackedMinHeight - 1, true, false},
-		{"narrow, tall", TwoColumnMinWidth - 1, StackedMinHeight, false, true},
-		{"narrow, short", TwoColumnMinWidth - 1, StackedMinHeight - 1, false, false},
+		{"wide", TwoColumnFullWidth, stackedMin, true, false},
+		{"preview would shrink, tall", TwoColumnFullWidth - 1, stackedMin, false, true},
+		{"preview would shrink, short", TwoColumnFullWidth - 1, stackedMin - 1, true, false},
+		{"narrow, tall", TwoColumnMinWidth - 1, stackedMin, false, true},
+		{"narrow, short", TwoColumnMinWidth - 1, stackedMin - 1, false, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			a := &App{width: tt.width, height: tt.height}
+			a := New(nil, config.Default())
+			a.width, a.height = tt.width, tt.height
 			if got := a.isTwoColumnMode(); got != tt.wantTwoColumn {
 				t.Errorf("isTwoColumnMode() = %v, want %v", got, tt.wantTwoColumn)
 			}

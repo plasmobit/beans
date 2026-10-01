@@ -61,8 +61,9 @@ const (
 	// shrunk preview, used when the terminal is too short to stack.
 	TwoColumnMinWidth = 120
 
-	StackedMinHeight  = 35 // minimum terminal height for the preview below the list
-	StackedListHeight = 15 // list pane height in the stacked layout, border included
+	// StackedBelowListMinHeight is the minimum number of rows below the list,
+	// preview and footer together, for the stacked layout.
+	StackedBelowListMinHeight = 20
 	// StackedPreviewMaxTextWidth caps the stacked preview, since longer lines
 	// are hard to read.
 	StackedPreviewMaxTextWidth = 120
@@ -143,7 +144,9 @@ type App struct {
 	config         *config.Config
 	width          int
 	height         int
-	program        *tea.Program // reference to program for sending messages from watcher
+	// stackedListHeight is the list pane height in the stacked layout, border included.
+	stackedListHeight int
+	program           *tea.Program // reference to program for sending messages from watcher
 
 	// Key chord state - tracks partial key sequences like "g" waiting for "t"
 	pendingKey string
@@ -166,7 +169,14 @@ func New(core *beancore.Core, cfg *config.Config) *App {
 		config:   cfg,
 		list:     newListModel(resolver, cfg),
 		preview:  newPreviewModel(nil, 0, 0),
+
+		stackedListHeight: cfg.GetStackedListHeight(),
 	}
+}
+
+// stackedMinHeight returns the minimum terminal height for the preview below the list.
+func (a *App) stackedMinHeight() int {
+	return a.stackedListHeight + StackedBelowListMinHeight
 }
 
 // Init initializes the application
@@ -180,19 +190,19 @@ func (a *App) isTwoColumnMode() bool {
 	if a.width >= TwoColumnFullWidth {
 		return true
 	}
-	return a.width >= TwoColumnMinWidth && a.height < StackedMinHeight
+	return a.width >= TwoColumnMinWidth && a.height < a.stackedMinHeight()
 }
 
 // isStackedMode returns true if the preview is shown below the list because
 // the terminal is too narrow for two columns but tall enough for both.
 func (a *App) isStackedMode() bool {
-	return !a.isTwoColumnMode() && a.height >= StackedMinHeight
+	return !a.isTwoColumnMode() && a.height >= a.stackedMinHeight()
 }
 
 // previewSize returns the size the preview pane is rendered at.
 func (a *App) previewSize() (int, int) {
 	if a.isStackedMode() {
-		return min(a.width, StackedPreviewMaxWidth), a.height - StackedListHeight - footerHeight
+		return min(a.width, StackedPreviewMaxWidth), a.height - a.stackedListHeight - footerHeight
 	}
 	_, rightWidth := calculatePaneWidths(a.width)
 	return rightWidth, a.height - footerHeight
@@ -270,8 +280,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			paneWidth, innerHeight := a.width, a.height-footerHeight-paneBorders-listBottomPadding
 			overPreview := false
 			if a.isStackedMode() {
-				innerHeight = StackedListHeight - paneBorders
-				overPreview = msg.Y >= StackedListHeight
+				innerHeight = a.stackedListHeight - paneBorders
+				overPreview = msg.Y >= a.stackedListHeight
 			} else if a.isTwoColumnMode() {
 				paneWidth, _ = calculatePaneWidths(a.width)
 				innerHeight = a.height - footerHeight - paneBorders
@@ -744,7 +754,7 @@ func (a *App) renderTwoColumnView() string {
 
 // renderStackedView renders the preview below a fixed-height list.
 func (a *App) renderStackedView() string {
-	listPane := a.list.ViewConstrained(a.width, StackedListHeight)
+	listPane := a.list.ViewConstrained(a.width, a.stackedListHeight)
 	a.preview.width, a.preview.height = a.previewSize()
 	return listPane + "\n" + a.preview.View() + "\n" + a.list.Footer()
 }
