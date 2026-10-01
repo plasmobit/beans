@@ -83,3 +83,39 @@ func TestListViewConstrained_ExactSize(t *testing.T) {
 		})
 	}
 }
+
+func TestListTitleInBorder(t *testing.T) {
+	items := []ui.FlatItem{{Bean: &bean.Bean{ID: "beans-0001", Title: "A", Status: "todo", Type: "task"}, Matched: true}}
+	m := newListModel(nil, config.Default())
+	m, _ = m.Update(tea.WindowSizeMsg{Width: 80, Height: 20})
+	m, _ = m.Update(beansLoadedMsg{items: items, idColWidth: 12})
+
+	lines := strings.Split(ansi.Strip(m.ViewConstrained(80, 15)), "\n")
+	if !strings.HasPrefix(lines[0], "╭─ Beans ─") {
+		t.Errorf("top border = %q, want the title in it", lines[0])
+	}
+	if !strings.Contains(lines[1], "beans-0001") {
+		t.Errorf("first row = %q, want the first bean", lines[1])
+	}
+
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("ab")})
+	lines = strings.Split(ansi.Strip(m.ViewConstrained(80, 15)), "\n")
+	if !strings.HasPrefix(lines[0], "╭─ Filter: ab") {
+		t.Errorf("top border while filtering = %q, want the filter input in it", lines[0])
+	}
+	if w := lipgloss.Width(lines[0]); w != 80 {
+		t.Errorf("top border width while filtering = %d, want 80", w)
+	}
+}
+
+func TestWithBorderTitleTruncates(t *testing.T) {
+	pane := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Width(18).Render("x")
+	top, _, _ := strings.Cut(ansi.Strip(withBorderTitle(pane, strings.Repeat("t", 40))), "\n")
+	if w := lipgloss.Width(top); w != 20 {
+		t.Errorf("top border width = %d, want 20: %q", w, top)
+	}
+	if !strings.HasSuffix(top, "… ─╮") {
+		t.Errorf("top border = %q, want truncated title followed by border", top)
+	}
+}

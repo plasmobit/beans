@@ -32,9 +32,12 @@ func TestPreviewView(t *testing.T) {
 		t.Error("preview should contain bean title")
 	}
 
-	// Should contain the ID
-	if !strings.Contains(view, "beans-test") {
-		t.Error("preview should contain bean ID")
+	lines := strings.Split(ansi.Strip(view), "\n")
+	if !strings.HasPrefix(lines[0], "╭─ beans-test ─") {
+		t.Errorf("top border = %q, want the bean ID in it", lines[0])
+	}
+	if !strings.Contains(lines[1], "Test Bean") {
+		t.Errorf("first row = %q, want the bean title", lines[1])
 	}
 
 	// Should contain status

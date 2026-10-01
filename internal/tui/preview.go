@@ -73,7 +73,8 @@ func (m previewModel) renderBean() string {
 		Width(m.width - paneBorders).
 		Height(innerHeight)
 
-	result := borderStyle.Render(content)
+	idStyle := lipgloss.NewStyle().Foreground(ui.ColorPrimary).Bold(true)
+	result := withBorderTitle(borderStyle.Render(content), idStyle.Render(m.bean.ID))
 
 	// Ensure output is exactly m.height lines
 	// When truncating, preserve the bottom border (last line)
@@ -108,13 +109,12 @@ func (m previewModel) contentWidth() int {
 	return max(1, m.width-paneBorders-2*previewPaddingX)
 }
 
-// renderHeader renders ID, title, metadata and tags, ending in a blank line.
+// renderHeader renders title, metadata and tags, ending in a blank line.
+// The ID sits in the top border.
 func (m previewModel) renderHeader() string {
-	// Header: ID and Title
-	idStyle := lipgloss.NewStyle().Foreground(ui.ColorPrimary).Bold(true)
 	titleStyle := lipgloss.NewStyle().Bold(true)
 
-	header := idStyle.Render(m.bean.ID) + "\n" + titleStyle.Render(m.bean.Title)
+	header := titleStyle.Render(m.bean.Title)
 
 	// Metadata: Status, Type, Priority
 	metaStyle := lipgloss.NewStyle().Foreground(ui.ColorMuted)

@@ -42,7 +42,7 @@ func TestListClickSelectsItem(t *testing.T) {
 		{"two columns, first page", 140, 30, 0, 7},
 		{"two columns, later page", 140, 30, 40, 44},
 		{"stacked, first page", 100, 40, 0, 5},
-		{"stacked, later page", 100, 40, 40, 44},
+		{"stacked, later page", 100, 40, 40, 42},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -83,7 +83,6 @@ func TestListClickOutsideItemsKeepsSelection(t *testing.T) {
 		msg  tea.MouseMsg
 	}{
 		{"top border", tea.MouseMsg{X: 5, Y: 0, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft}},
-		{"title bar", tea.MouseMsg{X: 5, Y: 1, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft}},
 		{"below last item", tea.MouseMsg{X: 5, Y: 10, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft}},
 		{"preview pane", tea.MouseMsg{X: 130, Y: 4, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft}},
 		{"wheel", tea.MouseMsg{X: 5, Y: 4, Action: tea.MouseActionPress, Button: tea.MouseButtonWheelDown}},

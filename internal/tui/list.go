@@ -135,12 +135,12 @@ func newListModel(resolver *beangraph.CoreResolver, cfg *config.Config) listMode
 	delegate := itemDelegate{cfg: cfg, selectedBeans: &selectedBeans}
 
 	l := list.New([]list.Item{}, delegate, 0, 0)
-	l.Title = "Beans"
+	// The title and the filter input go into the pane's top border.
+	l.SetShowTitle(false)
+	l.SetShowFilter(false)
 	l.SetShowStatusBar(false)
 	l.SetFilteringEnabled(true)
 	l.SetShowHelp(false)
-	l.Styles.Title = listTitleStyle
-	l.Styles.TitleBar = lipgloss.NewStyle().Padding(0, 0, 1, 1)
 	l.Styles.FilterPrompt = lipgloss.NewStyle().Foreground(ui.ColorPrimary)
 	l.Styles.FilterCursor = lipgloss.NewStyle().Foreground(ui.ColorPrimary)
 
@@ -517,8 +517,7 @@ func (m listModel) itemIndexAt(x, y, paneWidth, innerHeight int) (int, bool) {
 	l := m.list
 	l.SetSize(paneWidth-paneBorders, innerHeight)
 
-	titleBarHeight := 1 + l.Styles.TitleBar.GetVerticalPadding()
-	row := y - paneBorder - titleBarHeight
+	row := y - paneBorder
 	visible := len(l.VisibleItems())
 	if row < 0 || row >= l.Paginator.ItemsOnPage(visible) {
 		return 0, false
@@ -562,8 +561,6 @@ func (m listModel) View() string {
 		return "Loading..."
 	}
 
-	m.list.Title = m.title()
-
 	return m.viewContent(m.height-footerHeight-paneBorders-listBottomPadding) + "\n" + m.Footer()
 }
 
@@ -587,7 +584,17 @@ func (m listModel) viewContent(innerHeight int) string {
 		Width(m.width - paneBorders).
 		Height(innerHeight)
 
-	return border.Render(m.list.View())
+	return withBorderTitle(border.Render(m.list.View()), m.borderTitle())
+}
+
+// borderTitle is the filter input while the user types a filter, else the title.
+func (m listModel) borderTitle() string {
+	if m.list.FilterState() == list.Filtering {
+		input := m.list.FilterInput
+		input.Width = 0 // the list sizes it to the pane, which would pad it with spaces
+		return input.View()
+	}
+	return listTitleStyle.Render(m.title())
 }
 
 // Footer renders the help/status footer for the list view.
@@ -676,8 +683,6 @@ func (m listModel) ViewConstrained(width, height int) string {
 	// Recalculate columns for constrained width
 	m.cols = ui.CalculateResponsiveColumns(width, m.hasTags)
 	m.updateDelegate()
-
-	m.list.Title = m.title()
 
 	return m.viewContent(innerHeight)
 }
