@@ -120,10 +120,6 @@ func showStyledBean(b *bean.Bean) {
 	header.WriteString(ui.ID.Render(b.ID))
 	header.WriteString(" ")
 	header.WriteString(ui.RenderStatusWithColor(b.Status, statusColor, isArchive))
-	if implicitStatus, implicitStatusFrom := core.ImplicitStatus(b.ID); implicitStatus != "" {
-		header.WriteString(" ")
-		header.WriteString(ui.Muted.Render("↑" + implicitStatus + " (from " + implicitStatusFrom + ")"))
-	}
 
 	// Display type
 	if b.Type != "" {
@@ -165,7 +161,8 @@ func showStyledBean(b *bean.Bean) {
 		header.WriteString("\n")
 		header.WriteString(ui.Muted.Render(strings.Repeat("─", 50)))
 		header.WriteString("\n")
-		header.WriteString(formatRelationships(b))
+		closedStatus, closedFrom := core.ClosedAncestor(b.ID)
+		header.WriteString(formatRelationships(b, closedStatus, closedFrom))
 	}
 
 	header.WriteString("\n")
@@ -199,14 +196,27 @@ func showStyledBean(b *bean.Bean) {
 }
 
 // formatRelationships formats parent and blocks for display.
-func formatRelationships(b *bean.Bean) string {
+// closedStatus and closedFrom name the nearest closed ancestor of an open
+// bean (see Core.ClosedAncestor); both are empty when there is none.
+func formatRelationships(b *bean.Bean, closedStatus, closedFrom string) string {
 	var parts []string
+	closedMark := lipgloss.NewStyle().Foreground(ui.ColorDanger).Render("!" + closedStatus)
 
 	// Display parent
 	if b.Parent != "" {
-		parts = append(parts, fmt.Sprintf("%s %s",
+		line := fmt.Sprintf("%s %s",
 			ui.Muted.Render("parent:"),
-			ui.ID.Render(b.Parent)))
+			ui.ID.Render(b.Parent))
+		if closedStatus != "" && closedFrom == b.Parent {
+			line += " " + closedMark
+		}
+		parts = append(parts, line)
+	}
+	if closedStatus != "" && closedFrom != b.Parent {
+		parts = append(parts, fmt.Sprintf("%s %s %s",
+			ui.Muted.Render("ancestor:"),
+			ui.ID.Render(closedFrom),
+			closedMark))
 	}
 
 	// Display blocking

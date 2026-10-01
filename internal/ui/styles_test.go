@@ -1,6 +1,11 @@
 package ui
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	"github.com/charmbracelet/x/ansi"
+)
 
 func TestRenderBeanRow_NarrowWidth(t *testing.T) {
 	// Test that RenderBeanRow doesn't panic with very small MaxTitleWidth values
@@ -84,6 +89,49 @@ func TestRenderBeanRow_NarrowWidthWithPriority(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRenderBeanRow_ClosedAncestorMark(t *testing.T) {
+	const title = "A title far too long for the title column"
+	tests := []struct {
+		name       string
+		status     string
+		cfg        BeanRowConfig
+		wantStatus string // status column content, mark included
+	}{
+		{"short names", "todo", BeanRowConfig{MaxTitleWidth: 20}, "↑T"},
+		{"short names with priority", "todo", BeanRowConfig{MaxTitleWidth: 20, Priority: "high"}, "↑T"},
+		{"full names", "todo", BeanRowConfig{MaxTitleWidth: 20, UseFullNames: true}, "↑todo"},
+		{"longest full name", "in-progress", BeanRowConfig{MaxTitleWidth: 20, UseFullNames: true}, "↑in-progress"},
+		{"with tags", "todo", BeanRowConfig{MaxTitleWidth: 20, ShowTags: true, TagsColWidth: 24, MaxTags: 1, Tags: []string{"idea"}}, "↑T"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			plain := RenderBeanRow("abc123", tt.status, "task", title, tt.cfg)
+			cfg := tt.cfg
+			cfg.ImplicitStatus = "completed"
+			marked := RenderBeanRow("abc123", tt.status, "task", title, cfg)
+
+			if !strings.Contains(ansi.Strip(marked), " "+tt.wantStatus+" ") {
+				t.Errorf("status column %q missing in %q", tt.wantStatus, ansi.Strip(marked))
+			}
+			if strings.Contains(ansi.Strip(marked), "completed") {
+				t.Errorf("ancestor status must not be spelled out: %q", ansi.Strip(marked))
+			}
+			if got, want := strings.Replace(ansi.Strip(marked), "↑", " ", 1), ansi.Strip(plain); got != want {
+				t.Errorf("mark must take the place of the space before the status\nplain:  %q\nmarked: %q",
+					want, ansi.Strip(marked))
+			}
+		})
+	}
+
+	t.Run("dimmed context row has no mark", func(t *testing.T) {
+		row := RenderBeanRow("abc123", "todo", "task", title, BeanRowConfig{MaxTitleWidth: 20, Dimmed: true, ImplicitStatus: "completed"})
+		if strings.Contains(row, "↑") {
+			t.Errorf("unexpected mark in dimmed row: %q", ansi.Strip(row))
+		}
+	})
 }
 
 func TestShortType(t *testing.T) {

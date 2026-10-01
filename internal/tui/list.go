@@ -195,7 +195,7 @@ func (m listModel) loadBeans() tea.Msg {
 	// Pre-compute implicit statuses for all beans
 	implicitStatuses := make(map[string]string, len(allBeans))
 	for _, b := range allBeans {
-		if status, _ := m.resolver.Core.ImplicitStatus(b.ID); status != "" {
+		if status, _ := m.resolver.Core.ClosedAncestor(b.ID); status != "" {
 			implicitStatuses[b.ID] = status
 		}
 	}

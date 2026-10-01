@@ -628,6 +628,19 @@ func (c *Core) ImplicitStatus(beanID string) (status, fromID string) {
 	return c.implicitStatusLocked(beanID)
 }
 
+// ClosedAncestor is ImplicitStatus restricted to open beans: a bean that is
+// itself scrapped or completed returns empty strings without walking its
+// ancestors. A non-empty result marks an open bean below a closed ancestor.
+func (c *Core) ClosedAncestor(beanID string) (status, fromID string) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if b, ok := c.beans[beanID]; !ok || isResolvedStatus(b.Status) {
+		return "", ""
+	}
+	return c.implicitStatusLocked(beanID)
+}
+
 // implicitStatusLocked walks the parent chain without acquiring the lock.
 // Must be called with c.mu held (at least for reading).
 func (c *Core) implicitStatusLocked(beanID string) (status, fromID string) {

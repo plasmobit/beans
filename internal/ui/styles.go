@@ -364,7 +364,7 @@ type BeanRowConfig struct {
 	Dimmed          bool     // Render row dimmed (for unmatched ancestor beans in tree)
 	IDColWidth      int      // Width of ID column (0 = default of ColWidthID)
 	UseFullNames    bool     // Use full type/status names instead of single-char abbreviations
-	ImplicitStatus string   // Implicit terminal status from an ancestor (e.g., "scrapped")
+	ImplicitStatus string   // Status of a closed ancestor of this open bean; marks the status column with a red ↑
 }
 
 // Base column widths for bean lists (minimum sizes)
@@ -525,6 +525,13 @@ func RenderBeanRow(id, status, typeName, title string, cfg BeanRowConfig) string
 		statusCol = statusStyle.Render(RenderStatusTextWithColor(statusStr, cfg.StatusColor, cfg.IsArchive))
 	}
 
+	// The closed-ancestor mark takes the place of the separator before the
+	// status, so the status column stays aligned with unmarked rows.
+	statusSep := " "
+	if cfg.ImplicitStatus != "" && !cfg.Dimmed {
+		statusSep = lipgloss.NewStyle().Foreground(ColorDanger).Render("↑")
+	}
+
 	// Tags column (optional)
 	var tagsCol string
 	if cfg.ShowTags {
@@ -585,12 +592,6 @@ func RenderBeanRow(id, status, typeName, title string, cfg BeanRowConfig) string
 		}
 	}
 
-	// Implicit status annotation (muted suffix, only when not dimmed)
-	var implicitAnnotation string
-	if cfg.ImplicitStatus != "" && !cfg.Dimmed {
-		implicitAnnotation = Muted.Render(" ↑" + cfg.ImplicitStatus)
-	}
-
 	if cfg.ShowTags {
 		// Pad title column to fixed width so tags align in a column
 		// Calculate padding needed: titleColWidth - (priority symbol width + title length)
@@ -602,7 +603,7 @@ func RenderBeanRow(id, status, typeName, title string, cfg BeanRowConfig) string
 		if titleColWidth > titleLen {
 			padding = strings.Repeat(" ", titleColWidth-titleLen)
 		}
-		return cursor + idCol + " " + typeCol + " " + statusCol + " " + prioritySymbol + titleStyled + padding + " " + tagsCol + implicitAnnotation
+		return cursor + idCol + " " + typeCol + statusSep + statusCol + " " + prioritySymbol + titleStyled + padding + " " + tagsCol
 	}
-	return cursor + idCol + " " + typeCol + " " + statusCol + " " + prioritySymbol + titleStyled + implicitAnnotation
+	return cursor + idCol + " " + typeCol + statusSep + statusCol + " " + prioritySymbol + titleStyled
 }

@@ -853,3 +853,44 @@ func TestIsResolvedStatus(t *testing.T) {
 		})
 	}
 }
+
+func TestClosedAncestor(t *testing.T) {
+	core, _ := setupTestCore(t)
+
+	// milestone (completed) -> epic (todo) -> task (in-progress), done (completed), dropped (scrapped)
+	for _, b := range []*bean.Bean{
+		{ID: "m001", Title: "Milestone", Status: "completed", Type: "milestone"},
+		{ID: "e001", Title: "Epic", Status: "todo", Type: "epic", Parent: "m001"},
+		{ID: "t001", Title: "Task", Status: "in-progress", Type: "task", Parent: "e001"},
+		{ID: "t002", Title: "Done", Status: "completed", Type: "task", Parent: "e001"},
+		{ID: "t003", Title: "Dropped", Status: "scrapped", Type: "task", Parent: "m001"},
+		{ID: "x001", Title: "Orphan", Status: "todo", Type: "task"},
+	} {
+		if err := core.Create(b); err != nil {
+			t.Fatalf("Create error: %v", err)
+		}
+	}
+
+	tests := []struct {
+		name       string
+		id         string
+		wantStatus string
+		wantFrom   string
+	}{
+		{"open child of closed parent", "e001", "completed", "m001"},
+		{"open grandchild of closed ancestor", "t001", "completed", "m001"},
+		{"completed bean needs no warning", "t002", "", ""},
+		{"scrapped bean needs no warning", "t003", "", ""},
+		{"no closed ancestor", "x001", "", ""},
+		{"closed root", "m001", "", ""},
+		{"unknown bean", "nope", "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			status, from := core.ClosedAncestor(tt.id)
+			if status != tt.wantStatus || from != tt.wantFrom {
+				t.Errorf("ClosedAncestor(%q) = (%q, %q), want (%q, %q)", tt.id, status, from, tt.wantStatus, tt.wantFrom)
+			}
+		})
+	}
+}
