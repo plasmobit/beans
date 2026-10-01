@@ -30,7 +30,7 @@ func getGlamourRenderer() *glamour.TermRenderer {
 		var err error
 		// Use DarkStyle instead of WithAutoStyle() to avoid slow terminal detection
 		// that can cause multi-second delays in some terminals
-		glamourRenderer, err = glamour.NewTermRenderer(glamour.WithStylePath("dark"))
+		glamourRenderer, err = glamour.NewTermRenderer(glamour.WithStyles(ui.DarkMarkdownStyle()))
 		if err != nil {
 			glamourRenderer = nil
 		}
@@ -43,15 +43,15 @@ var (
 	wrappedRenderersMu sync.Mutex
 )
 
-// getWrappedGlamourRenderer returns a cached renderer whose output lines,
-// including the style's document margins, are at most width columns wide.
+// getWrappedGlamourRenderer returns a cached renderer whose output lines are
+// at most width columns wide.
 func getWrappedGlamourRenderer(width int) *glamour.TermRenderer {
 	wrappedRenderersMu.Lock()
 	defer wrappedRenderersMu.Unlock()
 	if r, ok := wrappedRenderers[width]; ok {
 		return r
 	}
-	r, err := glamour.NewTermRenderer(glamour.WithStylePath("dark"), glamour.WithWordWrap(width))
+	r, err := glamour.NewTermRenderer(glamour.WithStyles(ui.DarkMarkdownStyle()), glamour.WithWordWrap(width))
 	if err != nil {
 		r = nil
 	}

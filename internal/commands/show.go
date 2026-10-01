@@ -177,7 +177,7 @@ func showStyledBean(b *bean.Bean) {
 	// Render the body with Glamour
 	if b.Body != "" {
 		renderer, err := glamour.NewTermRenderer(
-			glamour.WithAutoStyle(),
+			glamour.WithStyles(ui.AutoMarkdownStyle()),
 			glamour.WithWordWrap(80),
 		)
 		if err != nil {

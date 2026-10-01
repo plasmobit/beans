@@ -42,9 +42,8 @@ const (
 	paneSeparator     = 1 // column between the two-column panes
 	listBottomPadding = 1 // spare row below the single-column list
 	previewPaddingX   = 1 // horizontal padding inside the preview border, per side
-	glamourMarginX    = 2 // document margin of glamour's dark style, per side
 	// previewChromeX is the preview width not available to body text.
-	previewChromeX = paneBorders + 2*previewPaddingX + 2*glamourMarginX
+	previewChromeX = paneBorders + 2*previewPaddingX
 )
 
 // Layout selection: two columns, preview stacked below the list, or the list alone.
