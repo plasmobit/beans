@@ -119,6 +119,10 @@ type listModel struct {
 	// Active filters
 	tagFilter string // if set, only show beans with this tag
 
+	// hideClosed hides beans with an archive status and their descendants.
+	// It is a view mode, so clearFilter leaves it alone.
+	hideClosed bool
+
 	// Multi-select state
 	selectedBeans map[string]bool // IDs of beans marked for multi-edit
 
@@ -174,6 +178,16 @@ func (m listModel) loadBeans() tea.Msg {
 	if m.tagFilter != "" {
 		filter = &model.BeanFilter{Tags: []string{m.tagFilter}}
 	}
+	if m.hideClosed {
+		if filter == nil {
+			filter = &model.BeanFilter{}
+		}
+		for _, s := range m.config.StatusNames() {
+			if m.config.IsArchiveStatus(s) {
+				filter.ExcludeStatus = append(filter.ExcludeStatus, s)
+			}
+		}
+	}
 
 	// Query filtered beans
 	filteredBeans, err := m.resolver.Beans(context.Background(), filter)
@@ -198,6 +212,16 @@ func (m listModel) loadBeans() tea.Msg {
 		if status, _ := m.resolver.Core.ClosedAncestor(b.ID); status != "" {
 			implicitStatuses[b.ID] = status
 		}
+	}
+
+	if m.hideClosed {
+		open := filteredBeans[:0]
+		for _, b := range filteredBeans {
+			if _, closed := implicitStatuses[b.ID]; !closed {
+				open = append(open, b)
+			}
+		}
+		filteredBeans = open
 	}
 
 	// Build tree and flatten it
@@ -428,6 +452,9 @@ func (m listModel) Update(msg tea.Msg) (listModel, tea.Cmd) {
 						}
 					}
 				}
+			case "h":
+				m.hideClosed = !m.hideClosed
+				return m, m.loadBeans
 			case "y":
 				// Copy bean ID(s) to clipboard
 				if len(m.selectedBeans) > 0 {
@@ -501,15 +528,21 @@ func (m listModel) View() string {
 		return "Loading..."
 	}
 
-	// Update title based on active filter
-	if m.tagFilter != "" {
-		m.list.Title = fmt.Sprintf("Beans [tag: %s]", m.tagFilter)
-	} else {
-		m.list.Title = "Beans"
-	}
+	m.list.Title = m.title()
 
 	// Inner height: total height minus border (2) minus footer (1) minus padding (1)
 	return m.viewContent(m.height-4) + "\n" + m.Footer()
+}
+
+func (m listModel) title() string {
+	title := "Beans"
+	if m.hideClosed {
+		title += " (active)"
+	}
+	if m.tagFilter != "" {
+		title += fmt.Sprintf(" [tag: %s]", m.tagFilter)
+	}
+	return title
 }
 
 // viewContent renders just the bordered list without footer.
@@ -556,6 +589,7 @@ func (m listModel) Footer() string {
 			helpKeyStyle.Render("s") + " " + helpStyle.Render("status") + "  " +
 			helpKeyStyle.Render("t") + " " + helpStyle.Render("type") + "  " +
 			helpKeyStyle.Render("y") + " " + helpStyle.Render("copy id") + "  " +
+			helpKeyStyle.Render("h") + " " + helpStyle.Render(m.hideClosedHelp()) + "  " +
 			helpKeyStyle.Render("esc") + " " + helpStyle.Render("clear filter") + "  " +
 			helpKeyStyle.Render("?") + " " + helpStyle.Render("help") + "  " +
 			helpKeyStyle.Render("q") + " " + helpStyle.Render("quit")
@@ -570,6 +604,7 @@ func (m listModel) Footer() string {
 			helpKeyStyle.Render("s") + " " + helpStyle.Render("status") + "  " +
 			helpKeyStyle.Render("t") + " " + helpStyle.Render("type") + "  " +
 			helpKeyStyle.Render("y") + " " + helpStyle.Render("copy id") + "  " +
+			helpKeyStyle.Render("h") + " " + helpStyle.Render(m.hideClosedHelp()) + "  " +
 			helpKeyStyle.Render("/") + " " + helpStyle.Render("filter") + "  " +
 			helpKeyStyle.Render("?") + " " + helpStyle.Render("help") + "  " +
 			helpKeyStyle.Render("q") + " " + helpStyle.Render("quit")
@@ -585,6 +620,13 @@ func (m listModel) Footer() string {
 	}
 
 	return footer
+}
+
+func (m listModel) hideClosedHelp() string {
+	if m.hideClosed {
+		return "show closed"
+	}
+	return "hide closed"
 }
 
 // ViewConstrained renders the list constrained to the given width and height.
@@ -603,12 +645,7 @@ func (m listModel) ViewConstrained(width, height int) string {
 	m.cols = ui.CalculateResponsiveColumns(width, m.hasTags)
 	m.updateDelegate()
 
-	// Update title based on active filter
-	if m.tagFilter != "" {
-		m.list.Title = fmt.Sprintf("Beans [tag: %s]", m.tagFilter)
-	} else {
-		m.list.Title = "Beans"
-	}
+	m.list.Title = m.title()
 
 	return m.viewContent(innerHeight)
 }
