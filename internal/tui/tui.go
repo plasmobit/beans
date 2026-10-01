@@ -217,6 +217,35 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
+	case tea.MouseMsg:
+		if a.state == viewList {
+			if msg.Action != tea.MouseActionPress {
+				return a, nil
+			}
+			paneWidth, innerHeight := a.width, a.height-4
+			if a.isTwoColumnMode() {
+				var previewWidth int
+				paneWidth, previewWidth = calculatePaneWidths(a.width)
+				innerHeight = a.height - 3
+				if msg.X >= paneWidth {
+					// Clamp against the size renderTwoColumnView renders at.
+					a.preview.width, a.preview.height = previewWidth, a.height-1
+					switch msg.Button {
+					case tea.MouseButtonWheelUp:
+						a.preview.scrollBy(-previewScrollStep)
+					case tea.MouseButtonWheelDown:
+						a.preview.scrollBy(previewScrollStep)
+					}
+					return a, nil
+				}
+			}
+			if msg.Button != tea.MouseButtonLeft {
+				return a, nil
+			}
+			a.list, cmd = a.list.selectAt(msg.X, msg.Y, paneWidth, innerHeight)
+			return a, cmd
+		}
+
 	case cursorChangedMsg:
 		// Update preview with the newly highlighted bean
 		_, rightWidth := calculatePaneWidths(a.width)
@@ -238,7 +267,12 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(msg.items) == 0 {
 			a.preview = newPreviewModel(nil, rightWidth, a.height-2)
 		} else if item, ok := a.list.list.SelectedItem().(beanItem); ok {
+			scroll := 0
+			if a.preview.bean != nil && a.preview.bean.ID == item.bean.ID {
+				scroll = a.preview.scroll
+			}
 			a.preview = newPreviewModel(item.bean, rightWidth, a.height-2)
+			a.preview.scroll = scroll
 		}
 		return a, cmd
 
@@ -720,7 +754,7 @@ func getEditor() string {
 // Run starts the TUI application with file watching
 func Run(core *beancore.Core, cfg *config.Config) error {
 	app := New(core, cfg)
-	p := tea.NewProgram(app, tea.WithAltScreen())
+	p := tea.NewProgram(app, tea.WithAltScreen(), tea.WithMouseCellMotion())
 
 	// Store reference to program for sending messages from watcher
 	app.program = p

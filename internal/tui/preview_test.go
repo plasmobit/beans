@@ -1,10 +1,16 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/hmans/beans/internal/ui"
 	"github.com/hmans/beans/pkg/bean"
+	"github.com/hmans/beans/pkg/config"
 )
 
 func TestPreviewView(t *testing.T) {
@@ -109,5 +115,86 @@ func TestPreviewViewEmptyBody(t *testing.T) {
 	// Should show placeholder for empty body
 	if !strings.Contains(view, "No description") {
 		t.Error("preview should show 'No description' for empty body")
+	}
+}
+
+func longBodyBean(lines int) *bean.Bean {
+	var body strings.Builder
+	for i := range lines {
+		fmt.Fprintf(&body, "- item %02d\n", i)
+	}
+	return &bean.Bean{ID: "beans-long", Title: "Long", Status: "todo", Type: "task", Body: body.String()}
+}
+
+func TestPreviewScroll(t *testing.T) {
+	const height = 20
+
+	tests := []struct {
+		name        string
+		scrolls     []int
+		wantVisible []string
+		wantHidden  []string
+	}{
+		{"initial", nil, []string{"item 00"}, []string{"item 30", "item 49"}},
+		{"scrolled down", []int{10}, []string{"item 12"}, []string{"item 05", "item 49"}},
+		{"clamped at end", []int{1000}, []string{"item 49"}, []string{"item 00", "..."}},
+		{"one notch up from end", []int{1000, -previewScrollStep}, []string{"item 34", "..."}, []string{"item 49"}},
+		{"clamped at start", []int{1000, -2000}, []string{"item 00", "..."}, []string{"item 49"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := newPreviewModel(longBodyBean(50), RightPaneMaxWidth, height)
+			for _, d := range tt.scrolls {
+				p.scrollBy(d)
+			}
+			view := ansi.Strip(p.View())
+
+			if got := lipgloss.Height(view); got != height {
+				t.Errorf("height = %d, want %d", got, height)
+			}
+			if !strings.Contains(view, "beans-long") {
+				t.Error("header scrolled away, want it fixed")
+			}
+			for _, s := range tt.wantVisible {
+				if !strings.Contains(view, s) {
+					t.Errorf("%q not visible\n%s", s, view)
+				}
+			}
+			for _, s := range tt.wantHidden {
+				if strings.Contains(view, s) {
+					t.Errorf("%q visible, want hidden\n%s", s, view)
+				}
+			}
+		})
+	}
+}
+
+func TestPreviewWheel(t *testing.T) {
+	items := []ui.FlatItem{
+		{Bean: longBodyBean(50), Matched: true},
+		{Bean: &bean.Bean{ID: "beans-0002", Title: "B", Status: "todo", Type: "task"}, Matched: true},
+	}
+	wheelDown := func(x int) tea.MouseMsg {
+		return tea.MouseMsg{X: x, Y: 5, Action: tea.MouseActionPress, Button: tea.MouseButtonWheelDown}
+	}
+
+	a := New(nil, config.Default())
+	a.Update(tea.WindowSizeMsg{Width: 140, Height: 30})
+	a.Update(beansLoadedMsg{items: items, idColWidth: 12})
+	leftWidth, _ := calculatePaneWidths(140)
+
+	a.Update(wheelDown(5))
+	if a.preview.scroll != 0 || a.list.list.Index() != 0 {
+		t.Errorf("wheel over list: preview scroll = %d, list index = %d, want both 0", a.preview.scroll, a.list.list.Index())
+	}
+
+	a.Update(wheelDown(leftWidth + 5))
+	if a.preview.scroll != previewScrollStep {
+		t.Errorf("wheel over preview: scroll = %d, want %d", a.preview.scroll, previewScrollStep)
+	}
+
+	a.Update(beansLoadedMsg{items: items, idColWidth: 12})
+	if a.preview.scroll != previewScrollStep {
+		t.Errorf("reload of the same bean: scroll = %d, want %d kept", a.preview.scroll, previewScrollStep)
 	}
 }

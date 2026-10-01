@@ -506,6 +506,41 @@ func (m listModel) Update(msg tea.Msg) (listModel, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
+// itemIndexAt returns the index of the item rendered at pane-relative
+// position (x, y), for a list pane rendered by viewContent with the given
+// outer width and inner height.
+func (m listModel) itemIndexAt(x, y, paneWidth, innerHeight int) (int, bool) {
+	if x < 1 || x > paneWidth-2 {
+		return 0, false
+	}
+
+	// Paginate a copy at the rendered size, so the page matches the screen.
+	l := m.list
+	l.SetSize(paneWidth-2, innerHeight)
+
+	titleBarHeight := 1 + l.Styles.TitleBar.GetVerticalPadding()
+	row := y - 1 - titleBarHeight // 1 for the top border
+	visible := len(l.VisibleItems())
+	if row < 0 || row >= l.Paginator.ItemsOnPage(visible) {
+		return 0, false
+	}
+	return l.Paginator.Page*l.Paginator.PerPage + row, true
+}
+
+// selectAt moves the cursor to the item at pane-relative position (x, y).
+func (m listModel) selectAt(x, y, paneWidth, innerHeight int) (listModel, tea.Cmd) {
+	index, ok := m.itemIndexAt(x, y, paneWidth, innerHeight)
+	if !ok || index == m.list.Index() {
+		return m, nil
+	}
+	m.list.Select(index)
+	item, ok := m.list.SelectedItem().(beanItem)
+	if !ok {
+		return m, nil
+	}
+	return m, func() tea.Msg { return cursorChangedMsg{beanID: item.bean.ID} }
+}
+
 // updateDelegate updates the list delegate with current responsive columns
 func (m *listModel) updateDelegate() {
 	delegate := itemDelegate{

@@ -387,8 +387,9 @@ func (m detailModel) Update(msg tea.Msg) (detailModel, tea.Cmd) {
 		}
 	}
 
-	// Forward updates to the appropriate component
-	if m.linksActive && len(m.links) > 0 {
+	// Forward updates to the appropriate component. The mouse wheel always
+	// scrolls the body, since the links list has no mouse handling.
+	if _, isMouse := msg.(tea.MouseMsg); !isMouse && m.linksActive && len(m.links) > 0 {
 		m.linkList, cmd = m.linkList.Update(msg)
 		cmds = append(cmds, cmd)
 	} else {
