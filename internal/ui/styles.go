@@ -373,6 +373,10 @@ const (
 	ColWidthStatus = 3
 	ColWidthType   = 3
 	ColWidthTags   = 24
+
+	// Column widths for full type/status names; "in-progress" needs 11.
+	ColWidthStatusFull = 12
+	ColWidthTypeFull   = 12
 )
 
 // ResponsiveColumns holds calculated column widths based on available space
@@ -402,8 +406,8 @@ func CalculateResponsiveColumns(totalWidth int, hasTags bool) ResponsiveColumns 
 	const minWidthForFullNames = 120
 	if totalWidth >= minWidthForFullNames {
 		cols.UseFullTypeStatus = true
-		cols.Status = 12 // "in-progress" needs 11 chars
-		cols.Type = 10   // "milestone" needs 9 chars
+		cols.Status = ColWidthStatusFull
+		cols.Type = ColWidthTypeFull
 	}
 
 	// Don't show tags in narrow viewports - prioritize title space
@@ -499,7 +503,7 @@ func RenderBeanRow(id, status, typeName, title string, cfg BeanRowConfig) string
 	var typeStr string
 	if cfg.UseFullNames {
 		typeStr = typeName
-		typeStyle = typeStyle.Width(12) // wider for full names
+		typeStyle = typeStyle.Width(ColWidthTypeFull)
 	} else {
 		typeStr = ShortType(typeName)
 	}
@@ -514,7 +518,7 @@ func RenderBeanRow(id, status, typeName, title string, cfg BeanRowConfig) string
 	var statusStr string
 	if cfg.UseFullNames {
 		statusStr = status
-		statusStyle = statusStyle.Width(12) // wider for full names
+		statusStyle = statusStyle.Width(ColWidthStatusFull)
 	} else {
 		statusStr = ShortStatus(status)
 	}
