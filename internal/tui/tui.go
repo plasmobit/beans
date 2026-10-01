@@ -208,6 +208,26 @@ func (a *App) previewSize() (int, int) {
 	return rightWidth, a.height - footerHeight
 }
 
+// listPaneSize returns the outer width and the inner height the list pane is
+// rendered at.
+func (a *App) listPaneSize() (int, int) {
+	if a.isStackedMode() {
+		return a.width, a.stackedListHeight - paneBorders
+	}
+	if a.isTwoColumnMode() {
+		leftWidth, _ := calculatePaneWidths(a.width)
+		return leftWidth, a.height - footerHeight - paneBorders
+	}
+	return a.width, a.height - footerHeight - paneBorders - listBottomPadding
+}
+
+// fitListToPane sizes the list model to its rendered pane, so that page
+// navigation moves by the number of visible rows.
+func (a *App) fitListToPane() {
+	paneWidth, innerHeight := a.listPaneSize()
+	a.list.list.SetSize(paneWidth-paneBorders, innerHeight)
+}
+
 // Update handles messages
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
@@ -277,14 +297,11 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if msg.Action != tea.MouseActionPress {
 				return a, nil
 			}
-			paneWidth, innerHeight := a.width, a.height-footerHeight-paneBorders-listBottomPadding
+			paneWidth, innerHeight := a.listPaneSize()
 			overPreview := false
 			if a.isStackedMode() {
-				innerHeight = a.stackedListHeight - paneBorders
 				overPreview = msg.Y >= a.stackedListHeight
 			} else if a.isTwoColumnMode() {
-				paneWidth, _ = calculatePaneWidths(a.width)
-				innerHeight = a.height - footerHeight - paneBorders
 				overPreview = msg.X >= paneWidth
 			}
 			if overPreview {
@@ -688,7 +705,12 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Forward all messages to the current view
 	switch a.state {
 	case viewList:
+		// Fit first: the terminal may have been resized while another view was active.
+		a.fitListToPane()
 		a.list, cmd = a.list.Update(msg)
+		if _, ok := msg.(tea.WindowSizeMsg); ok {
+			a.fitListToPane()
+		}
 	case viewDetail:
 		a.detail, cmd = a.detail.Update(msg)
 	case viewTagPicker:
