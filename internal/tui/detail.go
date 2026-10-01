@@ -38,6 +38,27 @@ func getGlamourRenderer() *glamour.TermRenderer {
 	return glamourRenderer
 }
 
+var (
+	wrappedRenderers   = map[int]*glamour.TermRenderer{}
+	wrappedRenderersMu sync.Mutex
+)
+
+// getWrappedGlamourRenderer returns a cached renderer whose output lines,
+// including the style's document margins, are at most width columns wide.
+func getWrappedGlamourRenderer(width int) *glamour.TermRenderer {
+	wrappedRenderersMu.Lock()
+	defer wrappedRenderersMu.Unlock()
+	if r, ok := wrappedRenderers[width]; ok {
+		return r
+	}
+	r, err := glamour.NewTermRenderer(glamour.WithStylePath("dark"), glamour.WithWordWrap(width))
+	if err != nil {
+		r = nil
+	}
+	wrappedRenderers[width] = r
+	return r
+}
+
 // backToListMsg signals navigation back to the list
 type backToListMsg struct{}
 

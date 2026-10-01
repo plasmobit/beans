@@ -118,6 +118,29 @@ func TestPreviewViewEmptyBody(t *testing.T) {
 	}
 }
 
+func TestPreviewWrapsBodyOnce(t *testing.T) {
+	line80 := strings.Repeat("abcdefghi ", 7) + "abcdefghij"
+	b := &bean.Bean{ID: "beans-wrap", Title: "Wrap", Status: "todo", Type: "task",
+		Body: line80 + "\n" + strings.Repeat("word ", 60)}
+
+	for _, width := range []int{RightPaneMaxWidth, 60} {
+		t.Run(fmt.Sprint(width), func(t *testing.T) {
+			view := ansi.Strip(newPreviewModel(b, width, 40).View())
+			for _, l := range strings.Split(view, "\n") {
+				if w := lipgloss.Width(l); w > width {
+					t.Errorf("line width %d exceeds pane width %d: %q", w, width, l)
+				}
+				if trimmed := strings.TrimSpace(strings.Trim(l, "│")); trimmed == "word" {
+					t.Errorf("stray single-word line, body was wrapped twice\n%s", view)
+				}
+			}
+			if width == RightPaneMaxWidth && !strings.Contains(view, line80) {
+				t.Errorf("80-column line was broken\n%s", view)
+			}
+		})
+	}
+}
+
 func longBodyBean(lines int) *bean.Bean {
 	var body strings.Builder
 	for i := range lines {
@@ -163,6 +186,94 @@ func TestPreviewScroll(t *testing.T) {
 			for _, s := range tt.wantHidden {
 				if strings.Contains(view, s) {
 					t.Errorf("%q visible, want hidden\n%s", s, view)
+				}
+			}
+		})
+	}
+}
+
+func TestStackedLayout(t *testing.T) {
+	items := []ui.FlatItem{
+		{Bean: longBodyBean(50), Matched: true},
+		{Bean: &bean.Bean{ID: "beans-0002", Title: "B", Status: "todo", Type: "task"}, Matched: true},
+	}
+
+	tests := []struct {
+		name          string
+		width, height int
+		wantPreview   bool
+	}{
+		{"narrow and tall", 100, StackedMinHeight, true},
+		{"narrow and short", 100, StackedMinHeight - 1, false},
+		{"just below two-column width", TwoColumnMinWidth - 1, 50, true},
+		{"two-column preview would shrink", TwoColumnFullWidth - 1, StackedMinHeight, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := New(nil, config.Default())
+			a.Update(tea.WindowSizeMsg{Width: tt.width, Height: tt.height})
+			a.Update(beansLoadedMsg{items: items, idColWidth: 12})
+			view := ansi.Strip(a.View())
+			lines := strings.Split(view, "\n")
+
+			gotPreview := strings.Contains(strings.Join(lines[min(StackedListHeight, len(lines)):], "\n"), "item 00")
+			if gotPreview != tt.wantPreview {
+				t.Fatalf("preview below list = %v, want %v\n%s", gotPreview, tt.wantPreview, view)
+			}
+			if !tt.wantPreview {
+				return
+			}
+			if got := len(lines); got != tt.height {
+				t.Errorf("view height = %d, want %d", got, tt.height)
+			}
+			// The footer is excluded: its help line is not truncated in any layout.
+			if got := lipgloss.Width(strings.Join(lines[:len(lines)-1], "\n")); got > tt.width {
+				t.Errorf("panes width = %d, want <= %d", got, tt.width)
+			}
+			if got := lipgloss.Width(lines[StackedListHeight]); got != min(tt.width, StackedPreviewMaxWidth) {
+				t.Errorf("preview width = %d, want %d", got, min(tt.width, StackedPreviewMaxWidth))
+			}
+
+			wheel := func(y int) {
+				a.Update(tea.MouseMsg{X: 5, Y: y, Action: tea.MouseActionPress, Button: tea.MouseButtonWheelDown})
+			}
+			wheel(StackedListHeight - 1)
+			if a.preview.scroll != 0 {
+				t.Errorf("wheel over list: preview scroll = %d, want 0", a.preview.scroll)
+			}
+			wheel(StackedListHeight)
+			if a.preview.scroll != previewScrollStep {
+				t.Errorf("wheel over preview: scroll = %d, want %d", a.preview.scroll, previewScrollStep)
+			}
+		})
+	}
+}
+
+func TestLayoutSelection(t *testing.T) {
+	tests := []struct {
+		name          string
+		width, height int
+		wantTwoColumn bool
+		wantStacked   bool
+	}{
+		{"wide", TwoColumnFullWidth, StackedMinHeight, true, false},
+		{"preview would shrink, tall", TwoColumnFullWidth - 1, StackedMinHeight, false, true},
+		{"preview would shrink, short", TwoColumnFullWidth - 1, StackedMinHeight - 1, true, false},
+		{"narrow, tall", TwoColumnMinWidth - 1, StackedMinHeight, false, true},
+		{"narrow, short", TwoColumnMinWidth - 1, StackedMinHeight - 1, false, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := &App{width: tt.width, height: tt.height}
+			if got := a.isTwoColumnMode(); got != tt.wantTwoColumn {
+				t.Errorf("isTwoColumnMode() = %v, want %v", got, tt.wantTwoColumn)
+			}
+			if got := a.isStackedMode(); got != tt.wantStacked {
+				t.Errorf("isStackedMode() = %v, want %v", got, tt.wantStacked)
+			}
+			if tt.wantTwoColumn && tt.width >= TwoColumnFullWidth {
+				if w, _ := a.previewSize(); w-previewChromeX < PreviewMinTextWidth {
+					t.Errorf("preview text width = %d, want >= %d", w-previewChromeX, PreviewMinTextWidth)
 				}
 			}
 		})

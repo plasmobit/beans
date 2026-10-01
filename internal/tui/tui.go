@@ -34,20 +34,49 @@ const (
 	viewHelpOverlay
 )
 
-// Two-column layout constants
+// Pane geometry shared by the list and the preview.
 const (
-	TwoColumnMinWidth = 120 // minimum terminal width for two-column layout
-	RightPaneMaxWidth = 80  // max width of preview pane (text files follow 80 char convention)
+	paneBorder        = 1 // border thickness on each side of a pane
+	paneBorders       = 2 * paneBorder
+	footerHeight      = 1
+	paneSeparator     = 1 // column between the two-column panes
+	listBottomPadding = 1 // spare row below the single-column list
+	previewPaddingX   = 1 // horizontal padding inside the preview border, per side
+	glamourMarginX    = 2 // document margin of glamour's dark style, per side
+	// previewChromeX is the preview width not available to body text.
+	previewChromeX = paneBorders + 2*previewPaddingX + 2*glamourMarginX
+)
+
+// Layout selection: two columns, preview stacked below the list, or the list alone.
+const (
+	// PreviewMinTextWidth is the text width the preview aims for, following the
+	// 80-column convention for text files.
+	PreviewMinTextWidth = 80
+	RightPaneMaxWidth   = PreviewMinTextWidth + previewChromeX
+	LeftPaneMinWidth    = 40
+	// TwoColumnFullWidth is the narrowest terminal whose two-column preview
+	// keeps PreviewMinTextWidth; narrower, tall terminals stack instead.
+	TwoColumnFullWidth = LeftPaneMinWidth + RightPaneMaxWidth
+	// TwoColumnMinWidth is the narrowest terminal for two columns with a
+	// shrunk preview, used when the terminal is too short to stack.
+	TwoColumnMinWidth = 120
+
+	StackedMinHeight  = 35 // minimum terminal height for the preview below the list
+	StackedListHeight = 15 // list pane height in the stacked layout, border included
+	// StackedPreviewMaxTextWidth caps the stacked preview, since longer lines
+	// are hard to read.
+	StackedPreviewMaxTextWidth = 120
+	StackedPreviewMaxWidth     = StackedPreviewMaxTextWidth + previewChromeX
 )
 
 // calculatePaneWidths returns (leftWidth, rightWidth) for two-column layout.
 // Right pane is capped at RightPaneMaxWidth, left pane gets remaining space.
 func calculatePaneWidths(totalWidth int) (int, int) {
 	rightWidth := RightPaneMaxWidth
-	if totalWidth-rightWidth < 40 { // ensure left pane has reasonable minimum
-		rightWidth = totalWidth - 40
+	if totalWidth-rightWidth < LeftPaneMinWidth {
+		rightWidth = totalWidth - LeftPaneMinWidth
 	}
-	leftWidth := totalWidth - rightWidth - 1 // 1 for separator
+	leftWidth := totalWidth - rightWidth - paneSeparator
 	return leftWidth, rightWidth
 }
 
@@ -145,9 +174,28 @@ func (a *App) Init() tea.Cmd {
 	return a.list.Init()
 }
 
-// isTwoColumnMode returns true if the terminal width supports two-column layout
+// isTwoColumnMode returns true if the list and preview are shown side by side.
+// A shrunk side preview is used only when the terminal is too short to stack.
 func (a *App) isTwoColumnMode() bool {
-	return a.width >= TwoColumnMinWidth
+	if a.width >= TwoColumnFullWidth {
+		return true
+	}
+	return a.width >= TwoColumnMinWidth && a.height < StackedMinHeight
+}
+
+// isStackedMode returns true if the preview is shown below the list because
+// the terminal is too narrow for two columns but tall enough for both.
+func (a *App) isStackedMode() bool {
+	return !a.isTwoColumnMode() && a.height >= StackedMinHeight
+}
+
+// previewSize returns the size the preview pane is rendered at.
+func (a *App) previewSize() (int, int) {
+	if a.isStackedMode() {
+		return min(a.width, StackedPreviewMaxWidth), a.height - StackedListHeight - footerHeight
+	}
+	_, rightWidth := calculatePaneWidths(a.width)
+	return rightWidth, a.height - footerHeight
 }
 
 // Update handles messages
@@ -159,11 +207,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.width = msg.Width
 		a.height = msg.Height
 
-		// Update preview dimensions if in two-column mode
-		if a.isTwoColumnMode() {
-			_, rightWidth := calculatePaneWidths(a.width)
-			a.preview.width = rightWidth
-			a.preview.height = a.height - 2
+		if a.isTwoColumnMode() || a.isStackedMode() {
+			a.preview.width, a.preview.height = a.previewSize()
 		}
 
 	case tea.KeyMsg:
@@ -222,22 +267,26 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if msg.Action != tea.MouseActionPress {
 				return a, nil
 			}
-			paneWidth, innerHeight := a.width, a.height-4
-			if a.isTwoColumnMode() {
-				var previewWidth int
-				paneWidth, previewWidth = calculatePaneWidths(a.width)
-				innerHeight = a.height - 3
-				if msg.X >= paneWidth {
-					// Clamp against the size renderTwoColumnView renders at.
-					a.preview.width, a.preview.height = previewWidth, a.height-1
-					switch msg.Button {
-					case tea.MouseButtonWheelUp:
-						a.preview.scrollBy(-previewScrollStep)
-					case tea.MouseButtonWheelDown:
-						a.preview.scrollBy(previewScrollStep)
-					}
-					return a, nil
+			paneWidth, innerHeight := a.width, a.height-footerHeight-paneBorders-listBottomPadding
+			overPreview := false
+			if a.isStackedMode() {
+				innerHeight = StackedListHeight - paneBorders
+				overPreview = msg.Y >= StackedListHeight
+			} else if a.isTwoColumnMode() {
+				paneWidth, _ = calculatePaneWidths(a.width)
+				innerHeight = a.height - footerHeight - paneBorders
+				overPreview = msg.X >= paneWidth
+			}
+			if overPreview {
+				// Clamp against the size the preview renders at.
+				a.preview.width, a.preview.height = a.previewSize()
+				switch msg.Button {
+				case tea.MouseButtonWheelUp:
+					a.preview.scrollBy(-previewScrollStep)
+				case tea.MouseButtonWheelDown:
+					a.preview.scrollBy(previewScrollStep)
 				}
+				return a, nil
 			}
 			if msg.Button != tea.MouseButtonLeft {
 				return a, nil
@@ -248,14 +297,14 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case cursorChangedMsg:
 		// Update preview with the newly highlighted bean
-		_, rightWidth := calculatePaneWidths(a.width)
+		previewWidth, previewHeight := a.previewSize()
 		if msg.beanID != "" {
 			bean, err := a.resolver.Bean(context.Background(), msg.beanID)
 			if err == nil && bean != nil {
-				a.preview = newPreviewModel(bean, rightWidth, a.height-2)
+				a.preview = newPreviewModel(bean, previewWidth, previewHeight)
 			}
 		} else {
-			a.preview = newPreviewModel(nil, rightWidth, a.height-2)
+			a.preview = newPreviewModel(nil, previewWidth, previewHeight)
 		}
 		return a, nil
 
@@ -263,15 +312,15 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Forward to list view
 		a.list, cmd = a.list.Update(msg)
 		// Update preview with current cursor position
-		_, rightWidth := calculatePaneWidths(a.width)
+		previewWidth, previewHeight := a.previewSize()
 		if len(msg.items) == 0 {
-			a.preview = newPreviewModel(nil, rightWidth, a.height-2)
+			a.preview = newPreviewModel(nil, previewWidth, previewHeight)
 		} else if item, ok := a.list.list.SelectedItem().(beanItem); ok {
 			scroll := 0
 			if a.preview.bean != nil && a.preview.bean.ID == item.bean.ID {
 				scroll = a.preview.scroll
 			}
-			a.preview = newPreviewModel(item.bean, rightWidth, a.height-2)
+			a.preview = newPreviewModel(item.bean, previewWidth, previewHeight)
 			a.preview.scroll = scroll
 		}
 		return a, cmd
@@ -674,7 +723,7 @@ func (a *App) collectTagsWithCounts() []tagWithCount {
 // renderTwoColumnView renders the list and preview side by side with app-global footer
 func (a *App) renderTwoColumnView() string {
 	leftWidth, rightWidth := calculatePaneWidths(a.width)
-	contentHeight := a.height - 1 // Reserve 1 line for footer
+	contentHeight := a.height - footerHeight
 
 	// Render left pane (list) with constrained width, no footer
 	leftPane := a.list.ViewConstrained(leftWidth, contentHeight)
@@ -693,12 +742,22 @@ func (a *App) renderTwoColumnView() string {
 	return columns + "\n" + footer
 }
 
+// renderStackedView renders the preview below a fixed-height list.
+func (a *App) renderStackedView() string {
+	listPane := a.list.ViewConstrained(a.width, StackedListHeight)
+	a.preview.width, a.preview.height = a.previewSize()
+	return listPane + "\n" + a.preview.View() + "\n" + a.list.Footer()
+}
+
 // View renders the current view
 func (a *App) View() string {
 	switch a.state {
 	case viewList:
 		if a.isTwoColumnMode() {
 			return a.renderTwoColumnView()
+		}
+		if a.isStackedMode() {
+			return a.renderStackedView()
 		}
 		return a.list.View()
 	case viewDetail:

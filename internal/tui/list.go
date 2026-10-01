@@ -271,8 +271,7 @@ func (m listModel) Update(msg tea.Msg) (listModel, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		// Reserve space for border and footer
-		m.list.SetSize(msg.Width-2, msg.Height-4)
+		m.list.SetSize(msg.Width-paneBorders, msg.Height-footerHeight-paneBorders-listBottomPadding)
 		// Recalculate responsive columns
 		m.cols = ui.CalculateResponsiveColumns(msg.Width, m.hasTags)
 		m.updateDelegate()
@@ -510,16 +509,16 @@ func (m listModel) Update(msg tea.Msg) (listModel, tea.Cmd) {
 // position (x, y), for a list pane rendered by viewContent with the given
 // outer width and inner height.
 func (m listModel) itemIndexAt(x, y, paneWidth, innerHeight int) (int, bool) {
-	if x < 1 || x > paneWidth-2 {
+	if x < paneBorder || x >= paneWidth-paneBorder {
 		return 0, false
 	}
 
 	// Paginate a copy at the rendered size, so the page matches the screen.
 	l := m.list
-	l.SetSize(paneWidth-2, innerHeight)
+	l.SetSize(paneWidth-paneBorders, innerHeight)
 
 	titleBarHeight := 1 + l.Styles.TitleBar.GetVerticalPadding()
-	row := y - 1 - titleBarHeight // 1 for the top border
+	row := y - paneBorder - titleBarHeight
 	visible := len(l.VisibleItems())
 	if row < 0 || row >= l.Paginator.ItemsOnPage(visible) {
 		return 0, false
@@ -565,8 +564,7 @@ func (m listModel) View() string {
 
 	m.list.Title = m.title()
 
-	// Inner height: total height minus border (2) minus footer (1) minus padding (1)
-	return m.viewContent(m.height-4) + "\n" + m.Footer()
+	return m.viewContent(m.height-footerHeight-paneBorders-listBottomPadding) + "\n" + m.Footer()
 }
 
 func (m listModel) title() string {
@@ -586,7 +584,7 @@ func (m listModel) viewContent(innerHeight int) string {
 	border := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(ui.ColorMuted).
-		Width(m.width - 2).
+		Width(m.width - paneBorders).
 		Height(innerHeight)
 
 	return border.Render(m.list.View())
@@ -672,9 +670,8 @@ func (m listModel) ViewConstrained(width, height int) string {
 	m.width = width
 	m.height = height
 
-	// Inner height for border content (height minus 2 for top/bottom border)
-	innerHeight := height - 2
-	m.list.SetSize(width-2, innerHeight)
+	innerHeight := height - paneBorders
+	m.list.SetSize(width-paneBorders, innerHeight)
 
 	// Recalculate columns for constrained width
 	m.cols = ui.CalculateResponsiveColumns(width, m.hasTags)

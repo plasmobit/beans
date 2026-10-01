@@ -57,9 +57,8 @@ func (m previewModel) renderBean() string {
 
 	content := header + "\n" + strings.Join(visible, "\n")
 
-	// Truncate content to fit within available height
-	// Border takes 2 lines (top + bottom), padding takes 0 vertical
-	innerHeight := m.height - 2
+	// Truncate content to fit within available height; there is no vertical padding.
+	innerHeight := m.height - paneBorders
 	contentLines := strings.Split(content, "\n")
 	if len(contentLines) > innerHeight {
 		contentLines = contentLines[:innerHeight]
@@ -70,8 +69,8 @@ func (m previewModel) renderBean() string {
 	borderStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(ui.ColorMuted).
-		Padding(0, 1).
-		Width(m.width - 2).
+		Padding(0, previewPaddingX).
+		Width(m.width - paneBorders).
 		Height(innerHeight)
 
 	result := borderStyle.Render(content)
@@ -80,9 +79,8 @@ func (m previewModel) renderBean() string {
 	// When truncating, preserve the bottom border (last line)
 	resultLines := strings.Split(result, "\n")
 	if len(resultLines) > m.height {
-		// Keep first (m.height-1) lines + the last line (bottom border)
 		bottomBorder := resultLines[len(resultLines)-1]
-		resultLines = resultLines[:m.height-1]
+		resultLines = resultLines[:m.height-paneBorder]
 		resultLines = append(resultLines, bottomBorder)
 		result = strings.Join(resultLines, "\n")
 	}
@@ -102,7 +100,12 @@ func (m *previewModel) scrollBy(delta int) {
 // wrap breaks s into the lines the bordered, padded pane displays, so that
 // line counts match the screen.
 func (m previewModel) wrap(s string) string {
-	return lipgloss.NewStyle().Width(max(1, m.width-4)).Render(s)
+	return lipgloss.NewStyle().Width(m.contentWidth()).Render(s)
+}
+
+// contentWidth is the pane width minus border and horizontal padding.
+func (m previewModel) contentWidth() int {
+	return max(1, m.width-paneBorders-2*previewPaddingX)
 }
 
 // renderHeader renders ID, title, metadata and tags, ending in a blank line.
@@ -141,7 +144,7 @@ func (m previewModel) renderHeader() string {
 
 // bodyWindow returns how many body lines fit below the given header.
 func (m previewModel) bodyWindow(header string) int {
-	return max(1, m.height-2-lipgloss.Height(header))
+	return max(1, m.height-paneBorders-lipgloss.Height(header))
 }
 
 // bodyLines returns the rendered body, wrapped to the pane width.
@@ -154,8 +157,7 @@ func (m previewModel) renderBody() string {
 		return lipgloss.NewStyle().Foreground(ui.ColorMuted).Render("No description")
 	}
 
-	// Render markdown (reuse existing glamour renderer from detail.go)
-	renderer := getGlamourRenderer()
+	renderer := getWrappedGlamourRenderer(m.contentWidth())
 	if renderer == nil {
 		return m.bean.Body
 	}
