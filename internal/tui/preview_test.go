@@ -319,3 +319,55 @@ func TestPreviewWheel(t *testing.T) {
 		t.Errorf("reload of the same bean: scroll = %d, want %d kept", a.preview.scroll, previewScrollStep)
 	}
 }
+
+func TestPreviewPageKeys(t *testing.T) {
+	var items []ui.FlatItem
+	for i := range 100 {
+		b := longBodyBean(50)
+		b.ID = fmt.Sprintf("beans-%04d", i)
+		items = append(items, ui.FlatItem{Bean: b, Matched: true})
+	}
+	pgDown := tea.KeyMsg{Type: tea.KeyPgDown}
+	pgUp := tea.KeyMsg{Type: tea.KeyPgUp}
+
+	tests := []struct {
+		name          string
+		width, height int
+		wantScroll    bool // false: the keys page the list instead
+	}{
+		{"two columns", 140, 30, true},
+		{"stacked", 100, 40, true},
+		{"list only", 100, 30, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := New(nil, config.Default())
+			a.Update(tea.WindowSizeMsg{Width: tt.width, Height: tt.height})
+			a.Update(beansLoadedMsg{items: items, idColWidth: 12})
+
+			a.Update(pgDown)
+			a.Update(pgDown)
+			if !tt.wantScroll {
+				if a.list.list.Index() == 0 {
+					t.Error("pgdown without preview: list index = 0, want a later page")
+				}
+				return
+			}
+			if a.list.list.Index() != 0 {
+				t.Errorf("pgdown with preview: list index = %d, want 0", a.list.list.Index())
+			}
+			if a.preview.scroll != 2*previewScrollStep {
+				t.Errorf("after 2x pgdown: scroll = %d, want %d", a.preview.scroll, 2*previewScrollStep)
+			}
+			a.Update(pgUp)
+			if a.preview.scroll != previewScrollStep {
+				t.Errorf("after pgup: scroll = %d, want %d", a.preview.scroll, previewScrollStep)
+			}
+			a.Update(pgUp)
+			a.Update(pgUp)
+			if a.preview.scroll != 0 {
+				t.Errorf("pgup past the top: scroll = %d, want 0", a.preview.scroll)
+			}
+		})
+	}
+}

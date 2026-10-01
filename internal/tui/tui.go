@@ -282,6 +282,18 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.state = viewHelpOverlay
 				return a, a.helpOverlay.Init()
 			}
+		case "pgup", "pgdown":
+			// With a preview visible these scroll it; otherwise the list pages.
+			if a.state == viewList && a.list.list.FilterState() != 1 && (a.isTwoColumnMode() || a.isStackedMode()) {
+				// Clamp against the size the preview renders at.
+				a.preview.width, a.preview.height = a.previewSize()
+				if msg.String() == "pgup" {
+					a.preview.scrollBy(-previewScrollStep)
+				} else {
+					a.preview.scrollBy(previewScrollStep)
+				}
+				return a, nil
+			}
 		case "q":
 			if a.state == viewDetail || a.state == viewTagPicker || a.state == viewParentPicker || a.state == viewStatusPicker || a.state == viewTypePicker || a.state == viewBlockingPicker || a.state == viewPriorityPicker || a.state == viewHelpOverlay {
 				return a, tea.Quit
