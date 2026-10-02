@@ -282,6 +282,85 @@ func TestLoadAppliesDefaults(t *testing.T) {
 	}
 }
 
+func TestFormatVersion(t *testing.T) {
+	tests := []struct {
+		name   string
+		config string
+		want   string
+	}{
+		{
+			name:   "missing field stays empty",
+			config: "beans:\n  prefix: my-\n",
+			want:   "",
+		},
+		{
+			name:   "older version is kept",
+			config: "format_version: v0.1.0\nbeans:\n  prefix: my-\n",
+			want:   "v0.1.0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			configPath := filepath.Join(t.TempDir(), ConfigFileName)
+			if err := os.WriteFile(configPath, []byte(tt.config), 0644); err != nil {
+				t.Fatalf("WriteFile error = %v", err)
+			}
+			cfg, err := Load(configPath)
+			if err != nil {
+				t.Fatalf("Load() error = %v", err)
+			}
+			if cfg.FormatVersion != tt.want {
+				t.Errorf("FormatVersion = %q, want %q (Load must not stamp the current version)", cfg.FormatVersion, tt.want)
+			}
+		})
+	}
+}
+
+func TestSaveWritesFormatVersion(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := DefaultWithPrefix("myapp-")
+	cfg.SetConfigDir(tmpDir)
+	if err := cfg.Save(tmpDir); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	configPath := filepath.Join(tmpDir, ConfigFileName)
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile error = %v", err)
+	}
+	if !strings.Contains(string(data), "format_version: "+FormatVersion+"\n") {
+		t.Errorf("saved config lacks format_version %s:\n%s", FormatVersion, data)
+	}
+
+	loaded, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if loaded.FormatVersion != FormatVersion {
+		t.Errorf("FormatVersion = %q, want %q", loaded.FormatVersion, FormatVersion)
+	}
+}
+
+func TestSaveOmitsEmptyFormatVersion(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := DefaultWithPrefix("myapp-")
+	cfg.FormatVersion = ""
+	cfg.SetConfigDir(tmpDir)
+	if err := cfg.Save(tmpDir); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(tmpDir, ConfigFileName))
+	if err != nil {
+		t.Fatalf("ReadFile error = %v", err)
+	}
+	if strings.Contains(string(data), "format_version") {
+		t.Errorf("saved config contains format_version although it is unknown:\n%s", data)
+	}
+}
+
 func TestStatusesAreHardcoded(t *testing.T) {
 	// Statuses are hardcoded and not configurable (like types)
 	// Verify that any config only uses hardcoded statuses
@@ -1435,6 +1514,108 @@ func TestGetWorktreeFetchTimeout(t *testing.T) {
 
 		if got := cfg.GetWorktreeFetchTimeout(); got != 0 {
 			t.Errorf("GetWorktreeFetchTimeout() = %v, want 0", got)
+		}
+	})
+}
+
+func TestGetStackedListHeight(t *testing.T) {
+	tests := []struct {
+		name       string
+		configured int
+		want       int
+	}{
+		{"unset uses default", 0, DefaultStackedListHeight},
+		{"custom value", 25, 25},
+		{"minimum kept", MinStackedListHeight, MinStackedListHeight},
+		{"too small is raised", 2, MinStackedListHeight},
+		{"negative is raised", -3, MinStackedListHeight},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := Default()
+			cfg.TUI.StackedListHeight = tt.configured
+			if got := cfg.GetStackedListHeight(); got != tt.want {
+				t.Errorf("GetStackedListHeight() = %d, want %d", got, tt.want)
+			}
+		})
+	}
+
+	t.Run("loads from config file and survives save", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, ConfigFileName)
+		configContent := "beans:\n  prefix: test-\ntui:\n  stacked_list_height: 22\n"
+		if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+			t.Fatalf("WriteFile error = %v", err)
+		}
+
+		cfg, err := Load(configPath)
+		if err != nil {
+			t.Fatalf("Load() error = %v", err)
+		}
+		if got := cfg.GetStackedListHeight(); got != 22 {
+			t.Errorf("GetStackedListHeight() = %d, want 22", got)
+		}
+
+		if err := cfg.Save(tmpDir); err != nil {
+			t.Fatalf("Save() error = %v", err)
+		}
+		reloaded, err := Load(configPath)
+		if err != nil {
+			t.Fatalf("Load() after Save error = %v", err)
+		}
+		if got := reloaded.GetStackedListHeight(); got != 22 {
+			t.Errorf("GetStackedListHeight() after Save = %d, want 22", got)
+		}
+	})
+}
+
+func TestGetPreviewPosition(t *testing.T) {
+	tests := []struct {
+		name       string
+		configured PreviewPosition
+		want       PreviewPosition
+	}{
+		{"unset uses auto", "", PreviewPositionAuto},
+		{"auto", PreviewPositionAuto, PreviewPositionAuto},
+		{"right", PreviewPositionRight, PreviewPositionRight},
+		{"below", PreviewPositionBelow, PreviewPositionBelow},
+		{"invalid uses auto", "left", PreviewPositionAuto},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := Default()
+			cfg.TUI.PreviewPosition = tt.configured
+			if got := cfg.GetPreviewPosition(); got != tt.want {
+				t.Errorf("GetPreviewPosition() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+
+	t.Run("loads from config file and survives save", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, ConfigFileName)
+		configContent := "beans:\n  prefix: test-\ntui:\n  preview_position: below\n"
+		if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+			t.Fatalf("WriteFile error = %v", err)
+		}
+
+		cfg, err := Load(configPath)
+		if err != nil {
+			t.Fatalf("Load() error = %v", err)
+		}
+		if got := cfg.GetPreviewPosition(); got != PreviewPositionBelow {
+			t.Errorf("GetPreviewPosition() = %q, want %q", got, PreviewPositionBelow)
+		}
+
+		if err := cfg.Save(tmpDir); err != nil {
+			t.Fatalf("Save() error = %v", err)
+		}
+		reloaded, err := Load(configPath)
+		if err != nil {
+			t.Fatalf("Load() after Save error = %v", err)
+		}
+		if got := reloaded.GetPreviewPosition(); got != PreviewPositionBelow {
+			t.Errorf("GetPreviewPosition() after Save = %q, want %q", got, PreviewPositionBelow)
 		}
 	})
 }

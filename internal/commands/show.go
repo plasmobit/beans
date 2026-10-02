@@ -50,10 +50,11 @@ var showCmd = &cobra.Command{
 
 		// JSON output
 		if showJSON {
-			if len(beans) == 1 {
-				return output.SuccessSingle(beans[0])
+			views := jsonBeans(resolver, beans, true)
+			if len(views) == 1 {
+				return output.SuccessSingle(views[0])
 			}
-			return output.SuccessMultiple(beans)
+			return output.SuccessMultiple(views)
 		}
 
 		// Raw markdown output (frontmatter + body)
@@ -100,15 +101,30 @@ var showCmd = &cobra.Command{
 				fmt.Println(ui.Muted.Render(strings.Repeat("═", 60)))
 				fmt.Println()
 			}
-			showStyledBean(b)
+			showStyledBean(resolver, b)
 		}
 
 		return nil
 	},
 }
 
+// jsonBeans prepares beans for JSON output: blocked_by lists the direct
+// blockers from both the bean's own field and incoming blocking links.
+func jsonBeans(resolver *beangraph.CoreResolver, beans []*bean.Bean, withBody bool) []output.Bean {
+	views := make([]output.Bean, len(beans))
+	for i, b := range beans {
+		blockers, _ := resolver.BeanBlockedBy(context.Background(), b, nil)
+		ids := make([]string, len(blockers))
+		for j, blocker := range blockers {
+			ids[j] = blocker.ID
+		}
+		views[i] = output.NewBean(b, ids, withBody)
+	}
+	return views
+}
+
 // showStyledBean displays a single bean with styled output.
-func showStyledBean(b *bean.Bean) {
+func showStyledBean(resolver *beangraph.CoreResolver, b *bean.Bean) {
 	statusCfg := cfg.GetStatus(b.Status)
 	statusColor := "gray"
 	if statusCfg != nil {
@@ -120,10 +136,6 @@ func showStyledBean(b *bean.Bean) {
 	header.WriteString(ui.ID.Render(b.ID))
 	header.WriteString(" ")
 	header.WriteString(ui.RenderStatusWithColor(b.Status, statusColor, isArchive))
-	if implicitStatus, implicitStatusFrom := core.ImplicitStatus(b.ID); implicitStatus != "" {
-		header.WriteString(" ")
-		header.WriteString(ui.Muted.Render("↑" + implicitStatus + " (from " + implicitStatusFrom + ")"))
-	}
 
 	// Display type
 	if b.Type != "" {
@@ -161,11 +173,13 @@ func showStyledBean(b *bean.Bean) {
 	header.WriteString(ui.Title.Render(b.Title))
 
 	// Display relationships
-	if b.Parent != "" || len(b.Blocking) > 0 {
+	blockedBy, _ := resolver.BeanBlockedBy(context.Background(), b, nil)
+	if b.Parent != "" || len(b.Blocking) > 0 || len(blockedBy) > 0 {
 		header.WriteString("\n")
 		header.WriteString(ui.Muted.Render(strings.Repeat("─", 50)))
 		header.WriteString("\n")
-		header.WriteString(formatRelationships(b))
+		closedStatus, closedFrom := core.ClosedAncestor(b.ID)
+		header.WriteString(formatRelationships(b, blockedBy, closedStatus, closedFrom))
 	}
 
 	header.WriteString("\n")
@@ -180,7 +194,7 @@ func showStyledBean(b *bean.Bean) {
 	// Render the body with Glamour
 	if b.Body != "" {
 		renderer, err := glamour.NewTermRenderer(
-			glamour.WithAutoStyle(),
+			glamour.WithStyles(ui.AutoMarkdownStyle()),
 			glamour.WithWordWrap(80),
 		)
 		if err != nil {
@@ -198,15 +212,30 @@ func showStyledBean(b *bean.Bean) {
 	}
 }
 
-// formatRelationships formats parent and blocks for display.
-func formatRelationships(b *bean.Bean) string {
+// formatRelationships formats parent, blocking and blocked-by for display.
+// blockedBy holds the beans blocking b (see CoreResolver.BeanBlockedBy); a
+// blocker with an archive status is marked with that status.
+// closedStatus and closedFrom name the nearest closed ancestor of an open
+// bean (see Core.ClosedAncestor); both are empty when there is none.
+func formatRelationships(b *bean.Bean, blockedBy []*bean.Bean, closedStatus, closedFrom string) string {
 	var parts []string
+	closedMark := lipgloss.NewStyle().Foreground(ui.ColorDanger).Render("!" + closedStatus)
 
 	// Display parent
 	if b.Parent != "" {
-		parts = append(parts, fmt.Sprintf("%s %s",
+		line := fmt.Sprintf("%s %s",
 			ui.Muted.Render("parent:"),
-			ui.ID.Render(b.Parent)))
+			ui.ID.Render(b.Parent))
+		if closedStatus != "" && closedFrom == b.Parent {
+			line += " " + closedMark
+		}
+		parts = append(parts, line)
+	}
+	if closedStatus != "" && closedFrom != b.Parent {
+		parts = append(parts, fmt.Sprintf("%s %s %s",
+			ui.Muted.Render("ancestor:"),
+			ui.ID.Render(closedFrom),
+			closedMark))
 	}
 
 	// Display blocking
@@ -214,6 +243,16 @@ func formatRelationships(b *bean.Bean) string {
 		parts = append(parts, fmt.Sprintf("%s %s",
 			ui.Muted.Render("blocking:"),
 			ui.ID.Render(target)))
+	}
+
+	for _, blocker := range blockedBy {
+		line := fmt.Sprintf("%s %s",
+			ui.Muted.Render("blocked by:"),
+			ui.ID.Render(blocker.ID))
+		if cfg.IsArchiveStatus(blocker.Status) {
+			line += " " + ui.Muted.Render(blocker.Status)
+		}
+		parts = append(parts, line)
 	}
 	return strings.Join(parts, "\n")
 }

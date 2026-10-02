@@ -20,6 +20,14 @@ const (
 	LegacyConfigFile = "config.yaml"
 	// DefaultServerPort is the default port for the web server
 	DefaultServerPort = 8080
+	// DefaultStackedListHeight is the TUI list pane height in the stacked layout.
+	DefaultStackedListHeight = 15
+	// MinStackedListHeight keeps the border and a few rows of the stacked list visible.
+	MinStackedListHeight = 5
+	// FormatVersion names the Beans release that introduced the current data
+	// format (bean frontmatter and config). It changes only when a release
+	// breaks that format, so an updater can tell which migrations a project needs.
+	FormatVersion = "v0.3.0"
 )
 
 // DefaultStatuses defines the hardcoded status configuration.
@@ -156,14 +164,42 @@ type ServerConfig struct {
 	CORSOrigins []string `yaml:"cors_origins,omitempty"`
 }
 
+// TUIConfig defines settings for the terminal UI.
+type TUIConfig struct {
+	// StackedListHeight is the list pane height in terminal rows, border
+	// included, when the preview is shown below the list.
+	// Default: 15. Values below 5 are raised to 5.
+	StackedListHeight int `yaml:"stacked_list_height,omitempty"`
+
+	// PreviewPosition places the preview pane relative to the list.
+	// Valid values: "auto" (chosen by terminal size), "right", "below".
+	// A position that does not fit the terminal falls back to the other one.
+	// Default: "auto"
+	PreviewPosition PreviewPosition `yaml:"preview_position,omitempty"`
+}
+
+// PreviewPosition places the TUI preview pane relative to the list.
+type PreviewPosition string
+
+const (
+	PreviewPositionAuto  PreviewPosition = "auto"
+	PreviewPositionRight PreviewPosition = "right"
+	PreviewPositionBelow PreviewPosition = "below"
+)
+
 // Config holds the beans configuration.
 // Note: Statuses are no longer stored in config - they are hardcoded like types.
 type Config struct {
+	// FormatVersion is empty when the config file has no format_version;
+	// the project's data format is then unknown.
+	FormatVersion string `yaml:"format_version,omitempty"`
+
 	Project  ProjectConfig  `yaml:"project,omitempty"`
 	Beans    BeansConfig    `yaml:"beans"`
 	Worktree WorktreeConfig `yaml:"worktree,omitempty"`
 	Agent    AgentConfig    `yaml:"agent,omitempty"`
 	Server   ServerConfig   `yaml:"server,omitempty"`
+	TUI      TUIConfig      `yaml:"tui,omitempty"`
 
 	// configDir is the directory containing the config file (not serialized)
 	// Used to resolve relative paths
@@ -184,6 +220,7 @@ type BeansConfig struct {
 // Default returns a Config with default values.
 func Default() *Config {
 	return &Config{
+		FormatVersion: FormatVersion,
 		Beans: BeansConfig{
 			Path:          DefaultBeansPath,
 			Prefix:        "",
@@ -462,11 +499,29 @@ func (c *Config) toYAMLNode() *yaml.Node {
 		serverMapping.Content = append(serverMapping.Content, portKey, intNode(c.Server.Port))
 	}
 
+	// Build the tui mapping
+	tuiMapping := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+	if c.TUI.StackedListHeight != 0 {
+		key := strNode("stacked_list_height")
+		key.HeadComment = "List height in rows when the preview is shown below the list (default: 15)"
+		tuiMapping.Content = append(tuiMapping.Content, key, intNode(c.TUI.StackedListHeight))
+	}
+	if c.TUI.PreviewPosition != "" {
+		key := strNode("preview_position")
+		key.HeadComment = "Preview position: auto, right, below (default: auto)"
+		tuiMapping.Content = append(tuiMapping.Content, key, strNode(string(c.TUI.PreviewPosition)))
+	}
+
 	// Build the top-level mapping
 	topMapping := &yaml.Node{
 		Kind:        yaml.MappingNode,
 		Tag:         "!!map",
 		HeadComment: "Beans configuration\nSee: https://github.com/hmans/beans",
+	}
+	if c.FormatVersion != "" {
+		key := strNode("format_version")
+		key.HeadComment = "Beans release that introduced this project's data format"
+		topMapping.Content = append(topMapping.Content, key, strNode(c.FormatVersion))
 	}
 	if len(projectMapping.Content) > 0 {
 		topMapping.Content = append(topMapping.Content, strNode("project"), projectMapping)
@@ -484,6 +539,10 @@ func (c *Config) toYAMLNode() *yaml.Node {
 
 	if len(serverMapping.Content) > 0 {
 		topMapping.Content = append(topMapping.Content, strNode("server"), serverMapping)
+	}
+
+	if len(tuiMapping.Content) > 0 {
+		topMapping.Content = append(topMapping.Content, strNode("tui"), tuiMapping)
 	}
 
 	// Wrap in a document node
@@ -817,4 +876,22 @@ func (c *Config) GetCORSOrigins() []string {
 		return c.Server.CORSOrigins
 	}
 	return []string{"http://localhost:*", "http://127.0.0.1:*"}
+}
+
+// GetStackedListHeight returns the TUI list pane height for the stacked layout.
+func (c *Config) GetStackedListHeight() int {
+	if c.TUI.StackedListHeight == 0 {
+		return DefaultStackedListHeight
+	}
+	return max(c.TUI.StackedListHeight, MinStackedListHeight)
+}
+
+// GetPreviewPosition returns the TUI preview position, "auto" if unset or invalid.
+func (c *Config) GetPreviewPosition() PreviewPosition {
+	switch c.TUI.PreviewPosition {
+	case PreviewPositionRight, PreviewPositionBelow:
+		return c.TUI.PreviewPosition
+	default:
+		return PreviewPositionAuto
+	}
 }

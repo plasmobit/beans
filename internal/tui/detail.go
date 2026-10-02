@@ -30,12 +30,33 @@ func getGlamourRenderer() *glamour.TermRenderer {
 		var err error
 		// Use DarkStyle instead of WithAutoStyle() to avoid slow terminal detection
 		// that can cause multi-second delays in some terminals
-		glamourRenderer, err = glamour.NewTermRenderer(glamour.WithStylePath("dark"))
+		glamourRenderer, err = glamour.NewTermRenderer(glamour.WithStyles(ui.DarkMarkdownStyle()))
 		if err != nil {
 			glamourRenderer = nil
 		}
 	})
 	return glamourRenderer
+}
+
+var (
+	wrappedRenderers   = map[int]*glamour.TermRenderer{}
+	wrappedRenderersMu sync.Mutex
+)
+
+// getWrappedGlamourRenderer returns a cached renderer whose output lines are
+// at most width columns wide.
+func getWrappedGlamourRenderer(width int) *glamour.TermRenderer {
+	wrappedRenderersMu.Lock()
+	defer wrappedRenderersMu.Unlock()
+	if r, ok := wrappedRenderers[width]; ok {
+		return r
+	}
+	r, err := glamour.NewTermRenderer(glamour.WithStyles(ui.DarkMarkdownStyle()), glamour.WithWordWrap(width))
+	if err != nil {
+		r = nil
+	}
+	wrappedRenderers[width] = r
+	return r
 }
 
 // backToListMsg signals navigation back to the list
@@ -118,7 +139,9 @@ func (d linkDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 			ShowTags:      d.cols.ShowTags,
 			TagsColWidth:  d.cols.Tags,
 			MaxTags:       d.cols.MaxTags,
-			UseFullNames:  true, // Full type/status names in detail view
+			// Full type/status names in detail view
+			TypeColWidth:   ui.ColWidthTypeFull,
+			StatusColWidth: ui.ColWidthStatusFull,
 		},
 	)
 
@@ -387,8 +410,9 @@ func (m detailModel) Update(msg tea.Msg) (detailModel, tea.Cmd) {
 		}
 	}
 
-	// Forward updates to the appropriate component
-	if m.linksActive && len(m.links) > 0 {
+	// Forward updates to the appropriate component. The mouse wheel always
+	// scrolls the body, since the links list has no mouse handling.
+	if _, isMouse := msg.(tea.MouseMsg); !isMouse && m.linksActive && len(m.links) > 0 {
 		m.linkList, cmd = m.linkList.Update(msg)
 		cmds = append(cmds, cmd)
 	} else {
