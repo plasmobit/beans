@@ -1,3 +1,12 @@
+---
+type: Reference
+title: TUI taxonomy
+description: The names of the terminal UI's views, layouts, panes, bean row columns and their parts, each with the code location that defines it.
+resource: ../internal/tui/
+tags: [tui, taxonomy, layout]
+generated: { by: claude/opus-5-5, at: 2026-10-02T06:20:37Z }
+---
+
 # TUI taxonomy
 
 This file lists the names of the terminal UI's elements, as the code uses them. It covers the
