@@ -117,12 +117,7 @@ Search Syntax (--search/-S):
 
 		// JSON output (flat list)
 		if listJSON {
-			if !listFull {
-				for _, b := range beans {
-					b.Body = ""
-				}
-			}
-			return output.SuccessMultiple(beans)
+			return output.SuccessMultiple(jsonBeans(resolver, beans, listFull))
 		}
 
 		// Quiet mode: just IDs (flat)
