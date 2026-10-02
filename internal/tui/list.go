@@ -22,6 +22,7 @@ type beanItem struct {
 	treePrefix      string // tree prefix for rendering (e.g., "├─" or "  └─")
 	matched         bool   // true if bean matched filter (vs. ancestor shown for context)
 	implicitStatus string // implicit terminal status from an ancestor, if any
+	blocked        bool   // open bean with an active blocker, directly or via an ancestor
 }
 
 func (i beanItem) Title() string       { return i.bean.Title }
@@ -97,6 +98,7 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 			TypeColWidth:    d.cols.Type,
 			StatusColWidth:  d.cols.Status,
 			ImplicitStatus: item.implicitStatus,
+			Blocked:        item.blocked,
 		},
 	)
 
@@ -120,15 +122,36 @@ type listModel struct {
 	// Active filters
 	tagFilter string // if set, only show beans with this tag
 
-	// hideClosed hides beans with an archive status and their descendants.
-	// It is a view mode, so clearFilter leaves it alone.
-	hideClosed bool
+	// viewMode is not a filter, so clearFilter leaves it alone.
+	viewMode viewMode
 
 	// Multi-select state
 	selectedBeans map[string]bool // IDs of beans marked for multi-edit
 
 	// Status message to display in footer
 	statusMessage string
+}
+
+// viewMode selects which beans the list shows; each mode narrows the previous one.
+type viewMode int
+
+const (
+	viewAll viewMode = iota
+	// viewActive hides beans with an archive status and their descendants.
+	viewActive
+	// viewUnblocked additionally hides blocked beans.
+	viewUnblocked
+	// viewReady shows what `beans list --ready` shows.
+	viewReady
+	viewModeCount
+)
+
+func (v viewMode) String() string {
+	return [...]string{"all", "active", "unblocked", "ready"}[v]
+}
+
+func (v viewMode) next() viewMode {
+	return (v + 1) % viewModeCount
 }
 
 func newListModel(resolver *beangraph.CoreResolver, cfg *config.Config) listModel {
@@ -155,8 +178,9 @@ func newListModel(resolver *beangraph.CoreResolver, cfg *config.Config) listMode
 
 // beansLoadedMsg is sent when beans are loaded
 type beansLoadedMsg struct {
-	items      []ui.FlatItem // flattened tree items
-	idColWidth int           // calculated ID column width for tree
+	items      []ui.FlatItem   // flattened tree items
+	idColWidth int             // calculated ID column width for tree
+	blocked    map[string]bool // IDs of open beans with an active blocker
 }
 
 // errMsg is sent when an error occurs
@@ -179,7 +203,7 @@ func (m listModel) loadBeans() tea.Msg {
 	if m.tagFilter != "" {
 		filter = &model.BeanFilter{Tags: []string{m.tagFilter}}
 	}
-	if m.hideClosed {
+	if m.viewMode >= viewActive {
 		if filter == nil {
 			filter = &model.BeanFilter{}
 		}
@@ -188,6 +212,13 @@ func (m listModel) loadBeans() tea.Msg {
 				filter.ExcludeStatus = append(filter.ExcludeStatus, s)
 			}
 		}
+	}
+	if m.viewMode >= viewUnblocked {
+		isBlocked := false
+		filter.IsBlocked = &isBlocked
+	}
+	if m.viewMode >= viewReady {
+		beangraph.AddReadyFilter(filter)
 	}
 
 	// Query filtered beans
@@ -215,7 +246,14 @@ func (m listModel) loadBeans() tea.Msg {
 		}
 	}
 
-	if m.hideClosed {
+	blocked := make(map[string]bool)
+	for _, b := range allBeans {
+		if !m.config.IsArchiveStatus(b.Status) && m.resolver.Core.IsBlocked(b.ID) {
+			blocked[b.ID] = true
+		}
+	}
+
+	if m.viewMode >= viewActive {
 		open := filteredBeans[:0]
 		for _, b := range filteredBeans {
 			if _, closed := implicitStatuses[b.ID]; !closed {
@@ -243,7 +281,7 @@ func (m listModel) loadBeans() tea.Msg {
 		idColWidth += maxDepth * 3 // 3 chars per depth level (├─ + space)
 	}
 
-	return beansLoadedMsg{items: items, idColWidth: idColWidth}
+	return beansLoadedMsg{items: items, idColWidth: idColWidth, blocked: blocked}
 }
 
 // setTagFilter sets the tag filter
@@ -288,6 +326,7 @@ func (m listModel) Update(msg tea.Msg) (listModel, tea.Cmd) {
 				treePrefix:      flatItem.TreePrefix,
 				matched:         flatItem.Matched,
 				implicitStatus: flatItem.ImplicitStatus,
+				blocked:        msg.blocked[flatItem.Bean.ID],
 			}
 			if len(flatItem.Bean.Tags) > 0 {
 				m.hasTags = true
@@ -453,7 +492,7 @@ func (m listModel) Update(msg tea.Msg) (listModel, tea.Cmd) {
 					}
 				}
 			case "h":
-				m.hideClosed = !m.hideClosed
+				m.viewMode = m.viewMode.next()
 				return m, m.loadBeans
 			case "y":
 				// Copy bean ID(s) to clipboard
@@ -567,8 +606,8 @@ func (m listModel) View() string {
 
 func (m listModel) title() string {
 	title := "Beans"
-	if m.hideClosed {
-		title += " (active)"
+	if m.viewMode != viewAll {
+		title += " (" + m.viewMode.String() + ")"
 	}
 	if m.tagFilter != "" {
 		title += fmt.Sprintf(" [tag: %s]", m.tagFilter)
@@ -630,7 +669,7 @@ func (m listModel) Footer() string {
 			helpKeyStyle.Render("s") + " " + helpStyle.Render("status") + "  " +
 			helpKeyStyle.Render("t") + " " + helpStyle.Render("type") + "  " +
 			helpKeyStyle.Render("y") + " " + helpStyle.Render("copy id") + "  " +
-			helpKeyStyle.Render("h") + " " + helpStyle.Render(m.hideClosedHelp()) + "  " +
+			helpKeyStyle.Render("h") + " " + helpStyle.Render(m.viewModeHelp()) + "  " +
 			helpKeyStyle.Render("v") + " " + helpStyle.Render("layout") + "  " +
 			helpKeyStyle.Render("esc") + " " + helpStyle.Render("clear filter") + "  " +
 			helpKeyStyle.Render("?") + " " + helpStyle.Render("help") + "  " +
@@ -646,7 +685,7 @@ func (m listModel) Footer() string {
 			helpKeyStyle.Render("s") + " " + helpStyle.Render("status") + "  " +
 			helpKeyStyle.Render("t") + " " + helpStyle.Render("type") + "  " +
 			helpKeyStyle.Render("y") + " " + helpStyle.Render("copy id") + "  " +
-			helpKeyStyle.Render("h") + " " + helpStyle.Render(m.hideClosedHelp()) + "  " +
+			helpKeyStyle.Render("h") + " " + helpStyle.Render(m.viewModeHelp()) + "  " +
 			helpKeyStyle.Render("/") + " " + helpStyle.Render("filter") + "  " +
 			helpKeyStyle.Render("v") + " " + helpStyle.Render("layout") + "  " +
 			helpKeyStyle.Render("?") + " " + helpStyle.Render("help") + "  " +
@@ -665,11 +704,8 @@ func (m listModel) Footer() string {
 	return footer
 }
 
-func (m listModel) hideClosedHelp() string {
-	if m.hideClosed {
-		return "show closed"
-	}
-	return "hide closed"
+func (m listModel) viewModeHelp() string {
+	return "show " + m.viewMode.next().String()
 }
 
 // ViewConstrained renders the list constrained to the given width and height.

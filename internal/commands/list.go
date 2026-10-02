@@ -101,14 +101,8 @@ Search Syntax (--search/-S):
 			filter.IsBlocked = &listIsBlocked
 		}
 
-		// --ready: beans available to start (not blocked, excludes in-progress/completed/scrapped/draft,
-		// and excludes beans with implicit terminal status from a scrapped/completed ancestor)
 		if listReady {
-			isBlocked := false
-			excludeImplicitTerminal := true
-			filter.IsBlocked = &isBlocked
-			filter.ExcludeStatus = append(filter.ExcludeStatus, "in-progress", "completed", "scrapped", "draft")
-			filter.ExcludeImplicitTerminal = &excludeImplicitTerminal
+			beangraph.AddReadyFilter(filter)
 		}
 
 		// Execute query via core resolver

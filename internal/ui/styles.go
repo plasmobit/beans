@@ -366,6 +366,7 @@ type BeanRowConfig struct {
 	TypeColWidth    int      // Width of type column (0 = ColWidthType); see typeStatusText
 	StatusColWidth  int      // Width of status column (0 = ColWidthStatus); see typeStatusText
 	ImplicitStatus string   // Status of a closed ancestor of this open bean; marks the status column with a red ↑
+	Blocked        bool     // Bean has an active blocker; marks the status column with ⊘ unless ImplicitStatus is set
 }
 
 // Base column widths for bean lists (minimum sizes)
@@ -539,11 +540,16 @@ func RenderBeanRow(id, status, typeName, title string, cfg BeanRowConfig) string
 		statusCol = statusStyle.Render(RenderStatusTextWithColor(statusStr, cfg.StatusColor, cfg.IsArchive))
 	}
 
-	// The closed-ancestor mark takes the place of the separator before the
-	// status, so the status column stays aligned with unmarked rows.
+	// The closed-ancestor and blocked marks take the place of the separator
+	// before the status, so the status column stays aligned with unmarked
+	// rows. A closed ancestor wins: its blockers no longer matter.
 	statusSep := " "
-	if cfg.ImplicitStatus != "" && !cfg.Dimmed {
-		statusSep = lipgloss.NewStyle().Foreground(ColorDanger).Render("↑")
+	if !cfg.Dimmed {
+		if cfg.ImplicitStatus != "" {
+			statusSep = lipgloss.NewStyle().Foreground(ColorDanger).Render("↑")
+		} else if cfg.Blocked {
+			statusSep = lipgloss.NewStyle().Foreground(ColorWarning).Render("⊘")
+		}
 	}
 
 	// Tags column (optional)

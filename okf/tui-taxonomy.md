@@ -59,9 +59,19 @@ top border.
 
 | Name | Code | Content |
 |---|---|---|
-| list pane (left pane in the two-column layout) | `listModel.viewContent` | the bean rows; border title "Beans", "Beans (active)" or "[tag: …]", replaced by the filter input while typing a filter |
+| list pane (left pane in the two-column layout) | `listModel.viewContent` | the bean rows; border title "Beans", followed by the **view mode** unless it is "all", and by "[tag: …]"; replaced by the filter input while typing a filter |
 | preview pane (right pane in the two-column layout) | `previewModel` (`preview.go`) | the highlighted bean; border title is its ID |
 | footer | `listModel.Footer` | one unbordered line: key help, the selection count "(N selected)", or a status message |
+
+The **view mode** (`viewMode`, `list.go`) selects which beans the list pane shows; `h` cycles
+through the modes, and each one narrows the previous:
+
+| Mode | Shows |
+|---|---|
+| all | every bean |
+| active | beans without an archive status and not below a closed ancestor |
+| unblocked | active beans that are not blocked, directly or via an ancestor |
+| ready | unblocked beans that are not in-progress or draft; the same beans as `beans list --ready` |
 
 ## Columns of a bean row
 
@@ -76,7 +86,7 @@ between 160 and 220. The title column takes the rest.
 | 1 | cursor | `▌` on the highlighted row |
 | 2 | ID column | bean ID, preceded by the **tree prefix** (`├─`, `└─`) |
 | 3 | type column | type, as one letter below `ColWidthNameMin`, otherwise the name cut to `TypeColWidth` |
-| 4 | status column | status, like the type column with `StatusColWidth`; a red `↑` marks an **implicit status** inherited from a closed ancestor |
+| 4 | status column | status, like the type column with `StatusColWidth`; a red `↑` marks an **implicit status** inherited from a closed ancestor, otherwise an amber `⊘` marks a **blocked** open bean |
 | 5 | priority symbol | before the title, only for a priority other than normal |
 | 6 | title column | title, cut with `...` at `MaxTitleWidth` |
 | 7 | tags column | up to `MaxTags` tags, only when `ShowTags` is set |

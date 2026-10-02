@@ -13,7 +13,7 @@ import (
 	"github.com/hmans/beans/pkg/config"
 )
 
-func newHideClosedTestList(t *testing.T) listModel {
+func newViewModeTestList(t *testing.T) listModel {
 	t.Helper()
 	beansDir := filepath.Join(t.TempDir(), ".beans")
 	if err := os.MkdirAll(beansDir, 0755); err != nil {
@@ -30,6 +30,9 @@ func newHideClosedTestList(t *testing.T) listModel {
 		{ID: "dropped", Title: "Dropped", Status: "scrapped", Type: "task"},
 		{ID: "done-epic", Title: "Done epic", Status: "completed", Type: "epic"},
 		{ID: "orphan", Title: "Under done epic", Status: "todo", Type: "task", Parent: "done-epic"},
+		{ID: "blocked", Title: "Blocked", Status: "todo", Type: "task", BlockedBy: []string{"open"}},
+		{ID: "wip", Title: "In progress", Status: "in-progress", Type: "task"},
+		{ID: "draft", Title: "Draft", Status: "draft", Type: "task"},
 	} {
 		b.Slug = bean.Slugify(b.Title)
 		if err := core.Create(b); err != nil {
@@ -53,21 +56,22 @@ func loadedIDs(t *testing.T, m listModel) []string {
 	return ids
 }
 
-func TestListHideClosed(t *testing.T) {
+func TestListViewMode(t *testing.T) {
 	tests := []struct {
-		name       string
-		hideClosed bool
-		tagFilter  string
-		want       []string
+		mode      viewMode
+		tagFilter string
+		want      []string
 	}{
-		{"shows all by default", false, "", []string{"done", "done-epic", "dropped", "open", "orphan"}},
-		{"hides archive statuses and their descendants", true, "", []string{"open"}},
-		{"combines with tag filter", true, "x", []string{"open"}},
+		{viewAll, "", []string{"blocked", "done", "done-epic", "draft", "dropped", "open", "orphan", "wip"}},
+		{viewActive, "", []string{"blocked", "draft", "open", "wip"}},
+		{viewUnblocked, "", []string{"draft", "open", "wip"}},
+		{viewReady, "", []string{"open"}},
+		{viewActive, "x", []string{"open"}},
 	}
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			m := newHideClosedTestList(t)
-			m.hideClosed = tt.hideClosed
+		t.Run(tt.mode.String()+"/tag="+tt.tagFilter, func(t *testing.T) {
+			m := newViewModeTestList(t)
+			m.viewMode = tt.mode
 			m.tagFilter = tt.tagFilter
 			if got := loadedIDs(t, m); !slices.Equal(got, tt.want) {
 				t.Errorf("ids = %v, want %v", got, tt.want)
@@ -76,28 +80,27 @@ func TestListHideClosed(t *testing.T) {
 	}
 }
 
-func TestListHideClosedToggle(t *testing.T) {
+func TestListViewModeCycle(t *testing.T) {
 	m := newListModel(nil, config.Default())
 	m.tagFilter = "x"
 
-	m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("h")})
-	if !m.hideClosed || cmd == nil {
-		t.Fatalf("h must enable hideClosed and trigger a reload (hideClosed=%v, cmd=%v)", m.hideClosed, cmd != nil)
-	}
-	if got, want := m.title(), "Beans (active) [tag: x]"; got != want {
-		t.Errorf("title = %q, want %q", got, want)
+	for _, want := range []string{"Beans (active) [tag: x]", "Beans (unblocked) [tag: x]", "Beans (ready) [tag: x]", "Beans [tag: x]"} {
+		var cmd tea.Cmd
+		m, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("h")})
+		if cmd == nil {
+			t.Fatalf("h must trigger a reload")
+		}
+		if got := m.title(); got != want {
+			t.Errorf("title = %q, want %q", got, want)
+		}
 	}
 
+	m.viewMode = viewReady
 	m.clearFilter()
-	if !m.hideClosed {
-		t.Error("clearFilter must not reset hideClosed")
+	if m.viewMode != viewReady {
+		t.Error("clearFilter must not reset the view mode")
 	}
-	if got, want := m.title(), "Beans (active)"; got != want {
-		t.Errorf("title = %q, want %q", got, want)
-	}
-
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("h")})
-	if m.hideClosed {
-		t.Error("second h must disable hideClosed")
+	if got, want := m.viewModeHelp(), "show all"; got != want {
+		t.Errorf("help = %q, want %q", got, want)
 	}
 }

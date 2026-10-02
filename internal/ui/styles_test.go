@@ -135,6 +135,48 @@ func TestRenderBeanRow_ClosedAncestorMark(t *testing.T) {
 	})
 }
 
+func TestRenderBeanRow_BlockedMark(t *testing.T) {
+	const title = "A title far too long for the title column"
+	tests := []struct {
+		name       string
+		cfg        BeanRowConfig
+		wantStatus string // status column content, mark included
+	}{
+		{"short names", BeanRowConfig{MaxTitleWidth: 20}, "⊘T"},
+		{"full names", BeanRowConfig{MaxTitleWidth: 20, TypeColWidth: ColWidthTypeFull, StatusColWidth: ColWidthStatusFull}, "⊘todo"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			plain := RenderBeanRow("abc123", "todo", "task", title, tt.cfg)
+			cfg := tt.cfg
+			cfg.Blocked = true
+			marked := ansi.Strip(RenderBeanRow("abc123", "todo", "task", title, cfg))
+
+			if !strings.Contains(marked, " "+tt.wantStatus+" ") {
+				t.Errorf("status column %q missing in %q", tt.wantStatus, marked)
+			}
+			if got, want := strings.Replace(marked, "⊘", " ", 1), ansi.Strip(plain); got != want {
+				t.Errorf("mark must take the place of the space before the status\nplain:  %q\nmarked: %q", want, marked)
+			}
+		})
+	}
+
+	t.Run("closed ancestor mark wins", func(t *testing.T) {
+		row := ansi.Strip(RenderBeanRow("abc123", "todo", "task", title, BeanRowConfig{MaxTitleWidth: 20, Blocked: true, ImplicitStatus: "completed"}))
+		if !strings.Contains(row, "↑T") || strings.Contains(row, "⊘") {
+			t.Errorf("want ↑ and no ⊘ in %q", row)
+		}
+	})
+
+	t.Run("dimmed context row has no mark", func(t *testing.T) {
+		row := RenderBeanRow("abc123", "todo", "task", title, BeanRowConfig{MaxTitleWidth: 20, Dimmed: true, Blocked: true})
+		if strings.Contains(row, "⊘") {
+			t.Errorf("unexpected mark in dimmed row: %q", ansi.Strip(row))
+		}
+	})
+}
+
 func TestCalculateResponsiveColumns(t *testing.T) {
 	tests := []struct {
 		width                int
