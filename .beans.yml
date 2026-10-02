@@ -1,5 +1,7 @@
 # Beans configuration
 # See: https://github.com/hmans/beans
+# Beans release that introduced this project's data format
+format_version: v0.3.0
 project:
   # Human-readable project name (displayed in the UI)
   name: beans

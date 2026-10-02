@@ -24,6 +24,10 @@ const (
 	DefaultStackedListHeight = 15
 	// MinStackedListHeight keeps the border and a few rows of the stacked list visible.
 	MinStackedListHeight = 5
+	// FormatVersion names the Beans release that introduced the current data
+	// format (bean frontmatter and config). It changes only when a release
+	// breaks that format, so an updater can tell which migrations a project needs.
+	FormatVersion = "v0.3.0"
 )
 
 // DefaultStatuses defines the hardcoded status configuration.
@@ -186,6 +190,10 @@ const (
 // Config holds the beans configuration.
 // Note: Statuses are no longer stored in config - they are hardcoded like types.
 type Config struct {
+	// FormatVersion is empty when the config file has no format_version;
+	// the project's data format is then unknown.
+	FormatVersion string `yaml:"format_version,omitempty"`
+
 	Project  ProjectConfig  `yaml:"project,omitempty"`
 	Beans    BeansConfig    `yaml:"beans"`
 	Worktree WorktreeConfig `yaml:"worktree,omitempty"`
@@ -212,6 +220,7 @@ type BeansConfig struct {
 // Default returns a Config with default values.
 func Default() *Config {
 	return &Config{
+		FormatVersion: FormatVersion,
 		Beans: BeansConfig{
 			Path:          DefaultBeansPath,
 			Prefix:        "",
@@ -508,6 +517,11 @@ func (c *Config) toYAMLNode() *yaml.Node {
 		Kind:        yaml.MappingNode,
 		Tag:         "!!map",
 		HeadComment: "Beans configuration\nSee: https://github.com/hmans/beans",
+	}
+	if c.FormatVersion != "" {
+		key := strNode("format_version")
+		key.HeadComment = "Beans release that introduced this project's data format"
+		topMapping.Content = append(topMapping.Content, key, strNode(c.FormatVersion))
 	}
 	if len(projectMapping.Content) > 0 {
 		topMapping.Content = append(topMapping.Content, strNode("project"), projectMapping)
