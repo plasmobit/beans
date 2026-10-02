@@ -103,6 +103,78 @@ func TestPreviewViewWithPriority(t *testing.T) {
 	}
 }
 
+func TestPreviewViewBlocked(t *testing.T) {
+	b := &bean.Bean{ID: "beans-test", Title: "Bean", Status: "todo", Type: "task"}
+	for _, blocked := range []bool{false, true} {
+		preview := newPreviewModel(b, 60, 20)
+		preview.blocked = blocked
+		view := ansi.Strip(preview.View())
+		if got := strings.Contains(view, "Status: todo ⊘ blocked  Type: task"); got != blocked {
+			t.Errorf("blocked=%v: blocked mark shown = %v\n%s", blocked, got, view)
+		}
+	}
+}
+
+// The preview takes the blocked mark from the list item, with the list's
+// precedence of a closed ancestor over a blocker.
+func TestPreviewBlockedFromList(t *testing.T) {
+	tests := []struct {
+		name           string
+		blocked        bool
+		implicitStatus string
+		want           bool
+	}{
+		{"unblocked", false, "", false},
+		{"blocked", true, "", true},
+		{"blocked below closed ancestor", true, "completed", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b := &bean.Bean{ID: "beans-0001", Title: "A", Status: "todo", Type: "task"}
+			items := []ui.FlatItem{
+				{Bean: b, Matched: true, ImplicitStatus: tt.implicitStatus},
+				{Bean: &bean.Bean{ID: "beans-0002", Title: "B", Status: "todo", Type: "task"}, Matched: true},
+			}
+			a := New(nil, config.Default())
+			a.Update(tea.WindowSizeMsg{Width: TwoColumnFullWidth, Height: 30})
+			a.Update(beansLoadedMsg{items: items, idColWidth: 12, blocked: map[string]bool{b.ID: tt.blocked}})
+			if a.preview.blocked != tt.want {
+				t.Errorf("after load: preview blocked = %v, want %v", a.preview.blocked, tt.want)
+			}
+
+			// Move away and back; the cursor message carries the mark.
+			a.list, _ = a.list.Update(tea.KeyMsg{Type: tea.KeyDown})
+			_, cmd := a.list.Update(tea.KeyMsg{Type: tea.KeyUp})
+			msg, ok := findMsg[cursorChangedMsg](cmd)
+			if !ok {
+				t.Fatal("cursor move emitted no cursorChangedMsg")
+			}
+			if msg.beanID != b.ID || msg.blocked != tt.want {
+				t.Errorf("cursorChangedMsg = %+v, want beanID %s, blocked %v", msg, b.ID, tt.want)
+			}
+		})
+	}
+}
+
+// findMsg runs cmd, descending into batches, and returns the first T.
+func findMsg[T tea.Msg](cmd tea.Cmd) (T, bool) {
+	var zero T
+	if cmd == nil {
+		return zero, false
+	}
+	switch msg := cmd().(type) {
+	case T:
+		return msg, true
+	case tea.BatchMsg:
+		for _, c := range msg {
+			if m, ok := findMsg[T](c); ok {
+				return m, true
+			}
+		}
+	}
+	return zero, false
+}
+
 func TestPreviewViewEmptyBody(t *testing.T) {
 	b := &bean.Bean{
 		ID:     "beans-test",

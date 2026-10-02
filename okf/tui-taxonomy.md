@@ -101,7 +101,7 @@ States of a row:
 
 | Name | Code | Content |
 |---|---|---|
-| header | `previewModel.renderHeader` | title, the metadata line "Status: … Type: … Priority: …", the tag line |
+| header | `previewModel.renderHeader` | title, the metadata line "Status: … Type: … Priority: …", the tag line; an amber `⊘ blocked` follows the status when the list row carries the `⊘` mark |
 | body | `previewModel.renderBody` | the bean's markdown; scrolls (`scrollBy`) with the mouse wheel and `pgup`/`pgdn`, while the header stays |
 
 ## Parts of the detail view

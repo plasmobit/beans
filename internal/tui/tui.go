@@ -85,7 +85,8 @@ type beansChangedMsg struct{}
 
 // cursorChangedMsg is sent when the list cursor moves to a different bean
 type cursorChangedMsg struct {
-	beanID string
+	beanID  string
+	blocked bool
 }
 
 // openTagPickerMsg requests opening the tag picker
@@ -364,6 +365,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			bean, err := a.resolver.Bean(context.Background(), msg.beanID)
 			if err == nil && bean != nil {
 				a.preview = newPreviewModel(bean, previewWidth, previewHeight)
+				a.preview.blocked = msg.blocked
 			}
 		} else {
 			a.preview = newPreviewModel(nil, previewWidth, previewHeight)
@@ -383,6 +385,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				scroll = a.preview.scroll
 			}
 			a.preview = newPreviewModel(item.bean, previewWidth, previewHeight)
+			a.preview.blocked = item.showsBlocked()
 			a.preview.scroll = scroll
 		}
 		return a, cmd

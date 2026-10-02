@@ -11,10 +11,11 @@ import (
 // previewModel is a read-only detail preview for the two-column layout.
 // It has no focus; the only interaction is scrolling the body.
 type previewModel struct {
-	bean   *bean.Bean
-	width  int
-	height int
-	scroll int // first visible body line
+	bean    *bean.Bean
+	blocked bool // renders a ⊘ blocked mark after the status
+	width   int
+	height  int
+	scroll  int // first visible body line
 }
 
 func newPreviewModel(b *bean.Bean, width, height int) previewModel {
@@ -118,7 +119,11 @@ func (m previewModel) renderHeader() string {
 
 	// Metadata: Status, Type, Priority
 	metaStyle := lipgloss.NewStyle().Foreground(ui.ColorMuted)
-	meta := metaStyle.Render("Status: " + m.bean.Status + "  Type: " + m.bean.Type)
+	meta := metaStyle.Render("Status: " + m.bean.Status)
+	if m.blocked {
+		meta += " " + lipgloss.NewStyle().Foreground(ui.ColorWarning).Render("⊘ blocked")
+	}
+	meta += metaStyle.Render("  Type: " + m.bean.Type)
 	if m.bean.Priority != "" && m.bean.Priority != "normal" {
 		meta += metaStyle.Render("  Priority: " + m.bean.Priority)
 	}

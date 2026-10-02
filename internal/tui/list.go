@@ -29,6 +29,10 @@ func (i beanItem) Title() string       { return i.bean.Title }
 func (i beanItem) Description() string { return i.bean.ID + " · " + i.bean.Status }
 func (i beanItem) FilterValue() string { return i.bean.Title + " " + i.bean.ID }
 
+// showsBlocked reports whether the bean carries the blocked mark. A closed
+// ancestor takes precedence, because its blockers no longer matter.
+func (i beanItem) showsBlocked() bool { return i.blocked && i.implicitStatus == "" }
+
 // itemDelegate handles rendering of list items
 type itemDelegate struct {
 	cfg           *config.Config
@@ -537,7 +541,7 @@ func (m listModel) Update(msg tea.Msg) (listModel, tea.Cmd) {
 	if m.list.Index() != prevIndex {
 		if item, ok := m.list.SelectedItem().(beanItem); ok {
 			cmds = append(cmds, func() tea.Msg {
-				return cursorChangedMsg{beanID: item.bean.ID}
+				return cursorChangedMsg{beanID: item.bean.ID, blocked: item.showsBlocked()}
 			})
 		}
 	}
@@ -576,7 +580,7 @@ func (m listModel) selectAt(x, y, paneWidth, innerHeight int) (listModel, tea.Cm
 	if !ok {
 		return m, nil
 	}
-	return m, func() tea.Msg { return cursorChangedMsg{beanID: item.bean.ID} }
+	return m, func() tea.Msg { return cursorChangedMsg{beanID: item.bean.ID, blocked: item.showsBlocked()} }
 }
 
 // updateDelegate updates the list delegate with current responsive columns
