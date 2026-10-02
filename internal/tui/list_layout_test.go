@@ -18,15 +18,15 @@ func TestListRowsFitPane(t *testing.T) {
 	for i := range 5 {
 		items = append(items, ui.FlatItem{
 			Bean: &bean.Bean{ID: fmt.Sprintf("anvl-%04d", i), Status: "completed", Type: "task", Priority: "critical",
-				Title: strings.Repeat("a long title that must be truncated ", 6)},
+				Title: strings.Repeat("a long title that must be truncated ", 6), Tags: []string{"idea", "frontend"}},
 			Depth:      1,
 			Matched:    true,
 			TreePrefix: "├─",
 		})
 	}
 
-	// The widths cover short and full type/status names.
-	for _, width := range []int{80, 120, 124, 160} {
+	// The widths cover short, cut and full type/status names, with and without tags.
+	for _, width := range []int{80, 120, 124, 139, 140, 150, 160, 190, 220, 250} {
 		t.Run(fmt.Sprint(width), func(t *testing.T) {
 			m := newListModel(nil, config.Default())
 			m, _ = m.Update(tea.WindowSizeMsg{Width: width, Height: 40})

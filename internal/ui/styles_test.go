@@ -101,8 +101,9 @@ func TestRenderBeanRow_ClosedAncestorMark(t *testing.T) {
 	}{
 		{"short names", "todo", BeanRowConfig{MaxTitleWidth: 20}, "↑T"},
 		{"short names with priority", "todo", BeanRowConfig{MaxTitleWidth: 20, Priority: "high"}, "↑T"},
-		{"full names", "todo", BeanRowConfig{MaxTitleWidth: 20, UseFullNames: true}, "↑todo"},
-		{"longest full name", "in-progress", BeanRowConfig{MaxTitleWidth: 20, UseFullNames: true}, "↑in-progress"},
+		{"full names", "todo", BeanRowConfig{MaxTitleWidth: 20, TypeColWidth: ColWidthTypeFull, StatusColWidth: ColWidthStatusFull}, "↑todo"},
+		{"longest full name", "in-progress", BeanRowConfig{MaxTitleWidth: 20, TypeColWidth: ColWidthTypeFull, StatusColWidth: ColWidthStatusFull}, "↑in-progress"},
+		{"cut names", "in-progress", BeanRowConfig{MaxTitleWidth: 20, TypeColWidth: ColWidthNameMin, StatusColWidth: ColWidthNameMin}, "↑in-pr"},
 		{"with tags", "todo", BeanRowConfig{MaxTitleWidth: 20, ShowTags: true, TagsColWidth: 24, MaxTags: 1, Tags: []string{"idea"}}, "↑T"},
 	}
 
@@ -132,6 +133,74 @@ func TestRenderBeanRow_ClosedAncestorMark(t *testing.T) {
 			t.Errorf("unexpected mark in dimmed row: %q", ansi.Strip(row))
 		}
 	})
+}
+
+func TestCalculateResponsiveColumns(t *testing.T) {
+	tests := []struct {
+		width                int
+		wantType, wantStatus int
+		wantTags             int // 0 = no tags column
+	}{
+		{80, ColWidthType, ColWidthStatus, 0},
+		{119, ColWidthType, ColWidthStatus, 0},
+		{120, ColWidthNameMin, ColWidthNameMin, 0},
+		{139, 8, 8, 0},
+		{140, 9, 8, ColWidthTags},
+		{160, ColWidthTypeFull, ColWidthStatusFull, ColWidthTags},
+		{190, ColWidthTypeFull, ColWidthStatusFull, 47},
+		{220, ColWidthTypeFull, ColWidthStatusFull, ColWidthTagsMax},
+		{300, ColWidthTypeFull, ColWidthStatusFull, ColWidthTagsMax},
+	}
+	for _, tt := range tests {
+		cols := CalculateResponsiveColumns(tt.width, true)
+		if cols.Type != tt.wantType || cols.Status != tt.wantStatus {
+			t.Errorf("width %d: type/status = %d/%d, want %d/%d", tt.width, cols.Type, cols.Status, tt.wantType, tt.wantStatus)
+		}
+		if cols.ShowTags != (tt.wantTags > 0) || cols.Tags != tt.wantTags {
+			t.Errorf("width %d: tags = %d (shown %v), want %d", tt.width, cols.Tags, cols.ShowTags, tt.wantTags)
+		}
+	}
+
+	if cols := CalculateResponsiveColumns(200, false); cols.ShowTags {
+		t.Error("tags column shown without tags")
+	}
+}
+
+func TestCalculateResponsiveColumns_TitleNeverShrinks(t *testing.T) {
+	titleWidth := func(width int) int {
+		cols := CalculateResponsiveColumns(width, true)
+		return width - cols.ID - cols.Type - cols.Status - cols.Tags
+	}
+	for width := 60; width <= 260; width++ {
+		if width == minWidthForNames || width == minWidthForTags {
+			continue
+		}
+		if prev, cur := titleWidth(width-1), titleWidth(width); cur < prev {
+			t.Errorf("title width shrinks from %d to %d at width %d", prev, cur, width)
+		}
+	}
+}
+
+func TestRenderBeanRow_TypeStatusWidth(t *testing.T) {
+	tests := []struct {
+		typeName, status string
+		width            int
+		want             string // type and status columns with their separators
+	}{
+		{"epic", "todo", ColWidthType, " E   T   "},
+		{"epic", "todo", ColWidthNameMin, " epic  todo  "},
+		{"milestone", "in-progress", ColWidthNameMin, " miles in-pr "},
+		{"milestone", "in-progress", 8, " mileston in-progr "},
+		{"milestone", "in-progress", ColWidthTypeFull, " milestone    in-progress  "},
+	}
+	for _, tt := range tests {
+		row := ansi.Strip(RenderBeanRow("abc", tt.status, tt.typeName, "Title", BeanRowConfig{
+			IDColWidth: 3, TypeColWidth: tt.width, StatusColWidth: tt.width,
+		}))
+		if want := "abc" + tt.want + "Title"; row != want {
+			t.Errorf("width %d: row = %q, want %q", tt.width, row, want)
+		}
+	}
 }
 
 func TestShortType(t *testing.T) {

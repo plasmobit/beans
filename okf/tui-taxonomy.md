@@ -67,14 +67,16 @@ top border.
 
 `ui.RenderBeanRow` (`internal/ui/styles.go`) renders one row per bean, used by both the TUI list pane and
 the CLI tree. `ui.CalculateResponsiveColumns` computes the column widths (`ResponsiveColumns`) from
-the width it is given.
+the width it is given: from 120 columns the type and status columns show names, 5 columns wide,
+and grow to full width at 160; from 140 the tags column appears, 24 columns wide, and grows to 70
+between 160 and 220. The title column takes the rest.
 
 | Order | Name | Content |
 |---|---|---|
 | 1 | cursor | `▌` on the highlighted row |
 | 2 | ID column | bean ID, preceded by the **tree prefix** (`├─`, `└─`) |
-| 3 | type column | type, as one letter or in full (`UseFullTypeStatus`) |
-| 4 | status column | status, as one letter or in full; a red `↑` marks an **implicit status** inherited from a closed ancestor |
+| 3 | type column | type, as one letter below `ColWidthNameMin`, otherwise the name cut to `TypeColWidth` |
+| 4 | status column | status, like the type column with `StatusColWidth`; a red `↑` marks an **implicit status** inherited from a closed ancestor |
 | 5 | priority symbol | before the title, only for a priority other than normal |
 | 6 | title column | title, cut with `...` at `MaxTitleWidth` |
 | 7 | tags column | up to `MaxTags` tags, only when `ShowTags` is set |

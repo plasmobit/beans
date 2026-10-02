@@ -139,7 +139,9 @@ func (d linkDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 			ShowTags:      d.cols.ShowTags,
 			TagsColWidth:  d.cols.Tags,
 			MaxTags:       d.cols.MaxTags,
-			UseFullNames:  true, // Full type/status names in detail view
+			// Full type/status names in detail view
+			TypeColWidth:   ui.ColWidthTypeFull,
+			StatusColWidth: ui.ColWidthStatusFull,
 		},
 	)
 
