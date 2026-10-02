@@ -166,7 +166,22 @@ type TUIConfig struct {
 	// included, when the preview is shown below the list.
 	// Default: 15. Values below 5 are raised to 5.
 	StackedListHeight int `yaml:"stacked_list_height,omitempty"`
+
+	// PreviewPosition places the preview pane relative to the list.
+	// Valid values: "auto" (chosen by terminal size), "right", "below".
+	// A position that does not fit the terminal falls back to the other one.
+	// Default: "auto"
+	PreviewPosition PreviewPosition `yaml:"preview_position,omitempty"`
 }
+
+// PreviewPosition places the TUI preview pane relative to the list.
+type PreviewPosition string
+
+const (
+	PreviewPositionAuto  PreviewPosition = "auto"
+	PreviewPositionRight PreviewPosition = "right"
+	PreviewPositionBelow PreviewPosition = "below"
+)
 
 // Config holds the beans configuration.
 // Note: Statuses are no longer stored in config - they are hardcoded like types.
@@ -481,6 +496,11 @@ func (c *Config) toYAMLNode() *yaml.Node {
 		key := strNode("stacked_list_height")
 		key.HeadComment = "List height in rows when the preview is shown below the list (default: 15)"
 		tuiMapping.Content = append(tuiMapping.Content, key, intNode(c.TUI.StackedListHeight))
+	}
+	if c.TUI.PreviewPosition != "" {
+		key := strNode("preview_position")
+		key.HeadComment = "Preview position: auto, right, below (default: auto)"
+		tuiMapping.Content = append(tuiMapping.Content, key, strNode(string(c.TUI.PreviewPosition)))
 	}
 
 	// Build the top-level mapping
@@ -850,4 +870,14 @@ func (c *Config) GetStackedListHeight() int {
 		return DefaultStackedListHeight
 	}
 	return max(c.TUI.StackedListHeight, MinStackedListHeight)
+}
+
+// GetPreviewPosition returns the TUI preview position, "auto" if unset or invalid.
+func (c *Config) GetPreviewPosition() PreviewPosition {
+	switch c.TUI.PreviewPosition {
+	case PreviewPositionRight, PreviewPositionBelow:
+		return c.TUI.PreviewPosition
+	default:
+		return PreviewPositionAuto
+	}
 }

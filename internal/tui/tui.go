@@ -145,6 +145,7 @@ type App struct {
 	height         int
 	// stackedListHeight is the list pane height in the stacked layout, border included.
 	stackedListHeight int
+	previewPosition   config.PreviewPosition
 	program           *tea.Program // reference to program for sending messages from watcher
 
 	// Key chord state - tracks partial key sequences like "g" waiting for "t"
@@ -170,6 +171,7 @@ func New(core *beancore.Core, cfg *config.Config) *App {
 		preview:  newPreviewModel(nil, 0, 0),
 
 		stackedListHeight: cfg.GetStackedListHeight(),
+		previewPosition:   cfg.GetPreviewPosition(),
 	}
 }
 
@@ -184,16 +186,33 @@ func (a *App) Init() tea.Cmd {
 }
 
 // isTwoColumnMode returns true if the list and preview are shown side by side.
-// A shrunk side preview is used only when the terminal is too short to stack.
+// In auto position, a shrunk side preview is used only when the terminal is
+// too short to stack.
 func (a *App) isTwoColumnMode() bool {
-	if a.width >= TwoColumnFullWidth {
-		return true
+	fitsTwoColumn := a.width >= TwoColumnMinWidth
+	fitsStacked := a.height >= a.stackedMinHeight()
+	switch a.previewPosition {
+	case config.PreviewPositionRight:
+		return fitsTwoColumn
+	case config.PreviewPositionBelow:
+		return fitsTwoColumn && !fitsStacked
 	}
-	return a.width >= TwoColumnMinWidth && a.height < a.stackedMinHeight()
+	return a.width >= TwoColumnFullWidth || (fitsTwoColumn && !fitsStacked)
+}
+
+// togglePreviewPosition moves the preview from the side to below the list, or back.
+func (a *App) togglePreviewPosition() {
+	if a.isTwoColumnMode() {
+		a.previewPosition = config.PreviewPositionBelow
+	} else {
+		a.previewPosition = config.PreviewPositionRight
+	}
+	a.preview.width, a.preview.height = a.previewSize()
+	a.fitListToPane()
 }
 
 // isStackedMode returns true if the preview is shown below the list because
-// the terminal is too narrow for two columns but tall enough for both.
+// two columns are not chosen and the terminal is tall enough for both.
 func (a *App) isStackedMode() bool {
 	return !a.isTwoColumnMode() && a.height >= a.stackedMinHeight()
 }
@@ -291,6 +310,11 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				} else {
 					a.preview.scrollBy(previewScrollStep)
 				}
+				return a, nil
+			}
+		case "v":
+			if a.state == viewList && a.list.list.FilterState() != 1 {
+				a.togglePreviewPosition()
 				return a, nil
 			}
 		case "q":

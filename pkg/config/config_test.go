@@ -1490,6 +1490,57 @@ func TestGetStackedListHeight(t *testing.T) {
 	})
 }
 
+func TestGetPreviewPosition(t *testing.T) {
+	tests := []struct {
+		name       string
+		configured PreviewPosition
+		want       PreviewPosition
+	}{
+		{"unset uses auto", "", PreviewPositionAuto},
+		{"auto", PreviewPositionAuto, PreviewPositionAuto},
+		{"right", PreviewPositionRight, PreviewPositionRight},
+		{"below", PreviewPositionBelow, PreviewPositionBelow},
+		{"invalid uses auto", "left", PreviewPositionAuto},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := Default()
+			cfg.TUI.PreviewPosition = tt.configured
+			if got := cfg.GetPreviewPosition(); got != tt.want {
+				t.Errorf("GetPreviewPosition() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+
+	t.Run("loads from config file and survives save", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, ConfigFileName)
+		configContent := "beans:\n  prefix: test-\ntui:\n  preview_position: below\n"
+		if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+			t.Fatalf("WriteFile error = %v", err)
+		}
+
+		cfg, err := Load(configPath)
+		if err != nil {
+			t.Fatalf("Load() error = %v", err)
+		}
+		if got := cfg.GetPreviewPosition(); got != PreviewPositionBelow {
+			t.Errorf("GetPreviewPosition() = %q, want %q", got, PreviewPositionBelow)
+		}
+
+		if err := cfg.Save(tmpDir); err != nil {
+			t.Fatalf("Save() error = %v", err)
+		}
+		reloaded, err := Load(configPath)
+		if err != nil {
+			t.Fatalf("Load() after Save error = %v", err)
+		}
+		if got := reloaded.GetPreviewPosition(); got != PreviewPositionBelow {
+			t.Errorf("GetPreviewPosition() after Save = %q, want %q", got, PreviewPositionBelow)
+		}
+	})
+}
+
 func TestGetServerPort(t *testing.T) {
 	t.Run("returns default when not configured", func(t *testing.T) {
 		cfg := Default()

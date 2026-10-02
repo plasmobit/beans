@@ -92,6 +92,7 @@ func (m helpOverlayModel) View() string {
 	content.WriteString(shortcut("/", "Filter") + "\n")
 	content.WriteString(shortcut("g t", "Filter by tag") + "\n")
 	content.WriteString(shortcut("pgup/pgdn", "Scroll preview") + "\n")
+	content.WriteString(shortcut("v", "Preview right/below") + "\n")
 	content.WriteString(shortcut("q", "Quit") + "\n")
 	content.WriteString("\n")
 

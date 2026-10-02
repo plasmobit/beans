@@ -262,21 +262,31 @@ func TestStackedLayout(t *testing.T) {
 
 func TestLayoutSelection(t *testing.T) {
 	stackedMin := config.DefaultStackedListHeight + StackedBelowListMinHeight
+	auto, right, below := config.PreviewPositionAuto, config.PreviewPositionRight, config.PreviewPositionBelow
 	tests := []struct {
 		name          string
+		position      config.PreviewPosition
 		width, height int
 		wantTwoColumn bool
 		wantStacked   bool
 	}{
-		{"wide", TwoColumnFullWidth, stackedMin, true, false},
-		{"preview would shrink, tall", TwoColumnFullWidth - 1, stackedMin, false, true},
-		{"preview would shrink, short", TwoColumnFullWidth - 1, stackedMin - 1, true, false},
-		{"narrow, tall", TwoColumnMinWidth - 1, stackedMin, false, true},
-		{"narrow, short", TwoColumnMinWidth - 1, stackedMin - 1, false, false},
+		{"wide", auto, TwoColumnFullWidth, stackedMin, true, false},
+		{"preview would shrink, tall", auto, TwoColumnFullWidth - 1, stackedMin, false, true},
+		{"preview would shrink, short", auto, TwoColumnFullWidth - 1, stackedMin - 1, true, false},
+		{"narrow, tall", auto, TwoColumnMinWidth - 1, stackedMin, false, true},
+		{"narrow, short", auto, TwoColumnMinWidth - 1, stackedMin - 1, false, false},
+		{"right, preview would shrink, tall", right, TwoColumnFullWidth - 1, stackedMin, true, false},
+		{"right, narrow, tall falls back to below", right, TwoColumnMinWidth - 1, stackedMin, false, true},
+		{"right, narrow, short", right, TwoColumnMinWidth - 1, stackedMin - 1, false, false},
+		{"below, wide", below, TwoColumnFullWidth, stackedMin, false, true},
+		{"below, wide, short falls back to right", below, TwoColumnFullWidth, stackedMin - 1, true, false},
+		{"below, narrow, short", below, TwoColumnMinWidth - 1, stackedMin - 1, false, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			a := New(nil, config.Default())
+			cfg := config.Default()
+			cfg.TUI.PreviewPosition = tt.position
+			a := New(nil, cfg)
 			a.width, a.height = tt.width, tt.height
 			if got := a.isTwoColumnMode(); got != tt.wantTwoColumn {
 				t.Errorf("isTwoColumnMode() = %v, want %v", got, tt.wantTwoColumn)
@@ -290,6 +300,39 @@ func TestLayoutSelection(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestTogglePreviewPosition(t *testing.T) {
+	items := []ui.FlatItem{{Bean: longBodyBean(50), Matched: true}}
+	stackedMin := config.DefaultStackedListHeight + StackedBelowListMinHeight
+	v := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("v")}
+
+	a := New(nil, config.Default())
+	a.Update(tea.WindowSizeMsg{Width: TwoColumnFullWidth, Height: stackedMin})
+	a.Update(beansLoadedMsg{items: items, idColWidth: 12})
+	if !a.isTwoColumnMode() {
+		t.Fatal("wide terminal should start with the preview on the right")
+	}
+
+	a.Update(v)
+	if !a.isStackedMode() {
+		t.Fatal("after v: preview should be below the list")
+	}
+	lines := strings.Split(ansi.Strip(a.View()), "\n")
+	if got := len(lines); got != stackedMin {
+		t.Errorf("view height = %d, want %d", got, stackedMin)
+	}
+	if !strings.Contains(strings.Join(lines[a.stackedListHeight:], "\n"), "item 00") {
+		t.Errorf("after v: preview body not below the list\n%s", strings.Join(lines, "\n"))
+	}
+	if _, h := a.listPaneSize(); a.list.list.Height() != h {
+		t.Errorf("list height = %d, want %d fitted to the stacked pane", a.list.list.Height(), h)
+	}
+
+	a.Update(v)
+	if !a.isTwoColumnMode() {
+		t.Error("after second v: preview should be on the right again")
 	}
 }
 

@@ -630,6 +630,7 @@ func (m listModel) Footer() string {
 			helpKeyStyle.Render("t") + " " + helpStyle.Render("type") + "  " +
 			helpKeyStyle.Render("y") + " " + helpStyle.Render("copy id") + "  " +
 			helpKeyStyle.Render("h") + " " + helpStyle.Render(m.hideClosedHelp()) + "  " +
+			helpKeyStyle.Render("v") + " " + helpStyle.Render("layout") + "  " +
 			helpKeyStyle.Render("esc") + " " + helpStyle.Render("clear filter") + "  " +
 			helpKeyStyle.Render("?") + " " + helpStyle.Render("help") + "  " +
 			helpKeyStyle.Render("q") + " " + helpStyle.Render("quit")
@@ -646,6 +647,7 @@ func (m listModel) Footer() string {
 			helpKeyStyle.Render("y") + " " + helpStyle.Render("copy id") + "  " +
 			helpKeyStyle.Render("h") + " " + helpStyle.Render(m.hideClosedHelp()) + "  " +
 			helpKeyStyle.Render("/") + " " + helpStyle.Render("filter") + "  " +
+			helpKeyStyle.Render("v") + " " + helpStyle.Render("layout") + "  " +
 			helpKeyStyle.Render("?") + " " + helpStyle.Render("help") + "  " +
 			helpKeyStyle.Render("q") + " " + helpStyle.Render("quit")
 	}
