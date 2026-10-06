@@ -71,6 +71,21 @@ func (b *Bean) RemoveTag(tag string) {
 	b.Tags = result
 }
 
+// propertyKeyPattern matches valid property keys: lowercase letters, numbers,
+// underscores, and hyphens, starting with a letter.
+var propertyKeyPattern = regexp.MustCompile(`^[a-z][a-z0-9_-]*$`)
+
+// ValidatePropertyKey checks if a property key is valid.
+func ValidatePropertyKey(key string) error {
+	if key == "" {
+		return fmt.Errorf("property key cannot be empty")
+	}
+	if !propertyKeyPattern.MatchString(key) {
+		return fmt.Errorf("invalid property key %q: must be lowercase, start with a letter, and contain only letters, numbers, underscores, and hyphens", key)
+	}
+	return nil
+}
+
 // HasParent returns true if the bean has a parent.
 func (b *Bean) HasParent() bool {
 	return b.Parent != ""
@@ -164,6 +179,9 @@ type Bean struct {
 
 	// BlockedBy is a list of bean IDs that are blocking this bean.
 	BlockedBy []string `yaml:"blocked_by,omitempty" json:"blocked_by,omitempty"`
+
+	// Properties holds user-defined key-value pairs.
+	Properties map[string]string `yaml:"properties,omitempty" json:"properties,omitempty"`
 }
 
 // frontMatter is the subset of Bean that gets serialized to YAML front matter.
@@ -179,6 +197,8 @@ type frontMatter struct {
 	Parent    string     `yaml:"parent,omitempty"`
 	Blocking  []string   `yaml:"blocking,omitempty"`
 	BlockedBy []string   `yaml:"blocked_by,omitempty"`
+
+	Properties map[string]string `yaml:"properties,omitempty"`
 }
 
 // Parse reads a bean from a reader (markdown with YAML front matter).
@@ -193,18 +213,19 @@ func Parse(r io.Reader) (*Bean, error) {
 	bodyStr := strings.TrimSuffix(string(body), "\n")
 
 	return &Bean{
-		Title:     fm.Title,
-		Status:    fm.Status,
-		Type:      fm.Type,
-		Priority:  fm.Priority,
-		Tags:      fm.Tags,
-		CreatedAt: fm.CreatedAt,
-		UpdatedAt: fm.UpdatedAt,
-		Order:     fm.Order,
-		Body:      bodyStr,
-		Parent:    fm.Parent,
-		Blocking:  fm.Blocking,
-		BlockedBy: fm.BlockedBy,
+		Title:      fm.Title,
+		Status:     fm.Status,
+		Type:       fm.Type,
+		Priority:   fm.Priority,
+		Tags:       fm.Tags,
+		CreatedAt:  fm.CreatedAt,
+		UpdatedAt:  fm.UpdatedAt,
+		Order:      fm.Order,
+		Body:       bodyStr,
+		Parent:     fm.Parent,
+		Blocking:   fm.Blocking,
+		BlockedBy:  fm.BlockedBy,
+		Properties: fm.Properties,
 	}, nil
 }
 
@@ -221,22 +242,25 @@ type renderFrontMatter struct {
 	Parent    string     `yaml:"parent,omitempty"`
 	Blocking  []string   `yaml:"blocking,omitempty"`
 	BlockedBy []string   `yaml:"blocked_by,omitempty"`
+
+	Properties map[string]string `yaml:"properties,omitempty"`
 }
 
 // Render serializes the bean back to markdown with YAML front matter.
 func (b *Bean) Render() ([]byte, error) {
 	fm := renderFrontMatter{
-		Title:     b.Title,
-		Status:    b.Status,
-		Type:      b.Type,
-		Priority:  b.Priority,
-		Tags:      b.Tags,
-		CreatedAt: b.CreatedAt,
-		UpdatedAt: b.UpdatedAt,
-		Order:     b.Order,
-		Parent:    b.Parent,
-		Blocking:  b.Blocking,
-		BlockedBy: b.BlockedBy,
+		Title:      b.Title,
+		Status:     b.Status,
+		Type:       b.Type,
+		Priority:   b.Priority,
+		Tags:       b.Tags,
+		CreatedAt:  b.CreatedAt,
+		UpdatedAt:  b.UpdatedAt,
+		Order:      b.Order,
+		Parent:     b.Parent,
+		Blocking:   b.Blocking,
+		BlockedBy:  b.BlockedBy,
+		Properties: b.Properties,
 	}
 
 	fmBytes, err := yaml.Marshal(&fm)

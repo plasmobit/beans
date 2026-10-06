@@ -110,3 +110,11 @@ func TestFormatRelationships_BlockedBy(t *testing.T) {
 		t.Errorf("got:\n%s\nwant:\n%s", got, want)
 	}
 }
+
+func TestFormatProperties(t *testing.T) {
+	got := ansi.Strip(formatProperties(map[string]string{"zeta": "z", "github_issue": "#135"}))
+	want := "github_issue: #135\nzeta: z"
+	if got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+}

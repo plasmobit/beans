@@ -34,6 +34,9 @@ func (r *CoreResolver) CreateBean(ctx context.Context, input model.CreateBeanInp
 	if len(input.Tags) > 0 {
 		b.Tags = input.Tags
 	}
+	if err := setProperties(b, input.Properties); err != nil {
+		return nil, err
+	}
 
 	// Handle parent (with validation)
 	if input.Parent != nil && *input.Parent != "" {
@@ -191,6 +194,16 @@ func (r *CoreResolver) UpdateBean(ctx context.Context, id string, input model.Up
 		b.Tags = newTags
 	}
 
+	if err := setProperties(b, input.SetProperties); err != nil {
+		return nil, err
+	}
+	for _, key := range input.RemoveProperties {
+		delete(b.Properties, key)
+	}
+	if len(b.Properties) == 0 {
+		b.Properties = nil
+	}
+
 	// Handle parent relationship
 	if input.Parent != nil {
 		if err := r.ValidateAndSetParent(b, *input.Parent); err != nil {
@@ -225,6 +238,22 @@ func (r *CoreResolver) UpdateBean(ctx context.Context, id string, input model.Up
 	}
 
 	return b, nil
+}
+
+// setProperties validates the given keys and writes the properties into b.
+func setProperties(b *bean.Bean, props []*model.PropertyInput) error {
+	for _, p := range props {
+		if err := bean.ValidatePropertyKey(p.Key); err != nil {
+			return err
+		}
+	}
+	for _, p := range props {
+		if b.Properties == nil {
+			b.Properties = make(map[string]string)
+		}
+		b.Properties[p.Key] = p.Value
+	}
+	return nil
 }
 
 // DeleteBean removes a bean and its incoming links.

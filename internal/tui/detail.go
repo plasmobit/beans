@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"maps"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -500,6 +502,7 @@ func (m detailModel) View() string {
 func (m detailModel) calculateHeaderHeight() int {
 	// Base: title line + ID/status line + borders/padding = ~6
 	baseHeight := 6
+	baseHeight += len(m.bean.Properties)
 
 	// Add height for links section (separate bordered box)
 	if len(m.links) > 0 {
@@ -511,6 +514,17 @@ func (m detailModel) calculateHeaderHeight() int {
 	}
 
 	return baseHeight
+}
+
+// propertyLines renders custom properties as one "key: value" line each, sorted by key.
+// Newlines in a value become spaces so that each property occupies exactly one line.
+func propertyLines(props map[string]string) []string {
+	keyStyle := lipgloss.NewStyle().Foreground(ui.ColorMuted)
+	lines := make([]string, 0, len(props))
+	for _, key := range slices.Sorted(maps.Keys(props)) {
+		lines = append(lines, keyStyle.Render(key+":")+" "+strings.ReplaceAll(props[key], "\n", " "))
+	}
+	return lines
 }
 
 func (m detailModel) renderHeader() string {
@@ -539,6 +553,11 @@ func (m detailModel) renderHeader() string {
 	if len(m.bean.Tags) > 0 {
 		headerContent.WriteString("  ")
 		headerContent.WriteString(ui.RenderTags(m.bean.Tags))
+	}
+
+	for _, line := range propertyLines(m.bean.Properties) {
+		headerContent.WriteString("\n")
+		headerContent.WriteString(line)
 	}
 
 	// Header box style - always muted border (not focused, links section is separate)

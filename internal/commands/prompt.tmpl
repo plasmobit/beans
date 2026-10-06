@@ -61,6 +61,8 @@ beans update --json <id> --blocking <other-id>                 # Mark as blockin
 beans update --json <id> --blocked-by <other-id>               # Mark as blocked by another bean
 beans update --json <id> --body-replace-old "old" --body-replace-new "new"  # Replace text
 beans update --json <id> --body-append "## Notes"              # Append to body
+beans update --json <id> --property github_issue=#135          # Set a custom property (string key=value)
+beans update --json <id> --remove-property github_issue        # Remove a custom property
 beans update --json <id> -s completed --body-replace-old "- [ ] Task" --body-replace-new "- [x] Task"  # Combined
 
 # Archive completed/scrapped beans (only when user requests)

@@ -489,3 +489,36 @@ func TestPreviewPageKeys(t *testing.T) {
 		})
 	}
 }
+
+func TestPreviewViewWithProperties(t *testing.T) {
+	b := &bean.Bean{
+		ID:         "beans-test",
+		Title:      "Bean with Properties",
+		Status:     "todo",
+		Type:       "task",
+		Properties: map[string]string{"zeta": "z", "github_issue": "#135"},
+		Body:       "Test body",
+	}
+
+	view := ansi.Strip(newPreviewModel(b, 60, 20).View())
+
+	issue := strings.Index(view, "github_issue: #135")
+	zeta := strings.Index(view, "zeta: z")
+	if issue < 0 || zeta < 0 {
+		t.Fatalf("preview should list both properties:\n%s", view)
+	}
+	if issue > zeta {
+		t.Errorf("properties should be sorted by key:\n%s", view)
+	}
+}
+
+func TestPropertyLines(t *testing.T) {
+	got := propertyLines(map[string]string{"b": "multi\nline", "a": "1"})
+	for i := range got {
+		got[i] = ansi.Strip(got[i])
+	}
+	want := []string{"a: 1", "b: multi line"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Errorf("propertyLines() = %q, want %q", got, want)
+	}
+}

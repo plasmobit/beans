@@ -3,6 +3,8 @@ package commands
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/charmbracelet/glamour"
@@ -182,6 +184,13 @@ func showStyledBean(resolver *beangraph.CoreResolver, b *bean.Bean) {
 		header.WriteString(formatRelationships(b, blockedBy, closedStatus, closedFrom))
 	}
 
+	if len(b.Properties) > 0 {
+		header.WriteString("\n")
+		header.WriteString(ui.Muted.Render(strings.Repeat("─", 50)))
+		header.WriteString("\n")
+		header.WriteString(formatProperties(b.Properties))
+	}
+
 	header.WriteString("\n")
 	header.WriteString(ui.Muted.Render(strings.Repeat("─", 50)))
 
@@ -255,6 +264,15 @@ func formatRelationships(b *bean.Bean, blockedBy []*bean.Bean, closedStatus, clo
 		parts = append(parts, line)
 	}
 	return strings.Join(parts, "\n")
+}
+
+// formatProperties formats custom properties as one "key: value" line each, sorted by key.
+func formatProperties(props map[string]string) string {
+	lines := make([]string, 0, len(props))
+	for _, key := range slices.Sorted(maps.Keys(props)) {
+		lines = append(lines, ui.Muted.Render(key+":")+" "+props[key])
+	}
+	return strings.Join(lines, "\n")
 }
 
 func RegisterShowCmd(root *cobra.Command) {

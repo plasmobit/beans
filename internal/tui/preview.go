@@ -110,7 +110,7 @@ func (m previewModel) contentWidth() int {
 	return max(1, m.width-paneBorders-2*previewPaddingX)
 }
 
-// renderHeader renders title, metadata and tags, ending in a blank line.
+// renderHeader renders title, metadata, tags and properties, ending in a blank line.
 // The ID sits in the top border.
 func (m previewModel) renderHeader() string {
 	titleStyle := lipgloss.NewStyle().Bold(true)
@@ -142,6 +142,7 @@ func (m previewModel) renderHeader() string {
 	if tagsLine != "" {
 		parts = append(parts, tagsLine)
 	}
+	parts = append(parts, propertyLines(m.bean.Properties)...)
 	parts = append(parts, "")
 
 	return m.wrap(lipgloss.JoinVertical(lipgloss.Left, parts...))
