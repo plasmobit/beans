@@ -27,4 +27,12 @@ The width fix in `RenderBeanRow` is superseded by beans-5fp6: the marker moved f
 
 - Root cause fixed via beans-5fp6 (status marker moved into the status column).
 - `viewContent` clips the list content to the pane's inner width and height, so an over-wide row can no longer wrap and grow the pane.
-- `TestListViewConstrained_ExactSize` uses tree depths up to 6; without the clip it renders 69 instead of 26 rows at 120x27.
+- `TestListViewContentClipsWideRows` renders rows twice the list width through a stub delegate; without the clip the pane grows (10 instead of 7 rows at 40x5).
+
+## Review (opencode, e660795)
+
+- Clip ineffective for `innerHeight <= 0` (terminal of 4 rows or less): rejected; lipgloss cannot render a bordered box with 0 inner rows, and such terminals are not a supported layout.
+- Test exercised the clip only via the zero title budget in `RenderBeanRow`: applied; `TestListViewContentClipsWideRows` uses a stub delegate with rows twice the list width. The zero budget itself is beans-q7ye.
+- Test tree prefixes differ from real ones (`├─` vs `├─ `): rejected; no effect on the result.
+- Modal background loses the pagination line: rejected; beans-376r renders the real layout behind modals.
+- Figure "69 instead of 26 rows" unconfirmed: rejected; measured by running the test without the clip.

@@ -2,9 +2,11 @@ package tui
 
 import (
 	"fmt"
+	"io"
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
@@ -46,8 +48,7 @@ func TestListRowsFitPane(t *testing.T) {
 }
 
 func TestListViewConstrained_ExactSize(t *testing.T) {
-	// Children of a completed parent carry an implicit-status annotation;
-	// deep tree prefixes shrink the title budget to a few columns.
+	// Deep tree prefixes shrink the title budget to a few columns.
 	items := []ui.FlatItem{{
 		Bean:    &bean.Bean{ID: "beans-root", Title: "Completed milestone", Status: "completed", Type: "milestone"},
 		Matched: true,
@@ -55,13 +56,13 @@ func TestListViewConstrained_ExactSize(t *testing.T) {
 	for i := range 30 {
 		items = append(items, ui.FlatItem{
 			Bean:           &bean.Bean{ID: fmt.Sprintf("beans-%04d", i), Title: "A child title long enough to be truncated", Status: "completed", Type: "task"},
-			Depth:          1 + i%6,
+			Depth:          1 + i%3,
 			Matched:        true,
-			TreePrefix:     strings.Repeat("│  ", i%6) + "├─",
+			TreePrefix:     strings.Repeat("│  ", i%3) + "├─",
 			ImplicitStatus: "completed",
 		})
 	}
-	const idColWidth = 10 + 2 + 6*3
+	const idColWidth = 10 + 2 + 3*3
 
 	for _, sz := range [][2]int{{120, 27}, {120, 28}, {140, 40}} {
 		width, height := sz[0], sz[1]
@@ -79,6 +80,43 @@ func TestListViewConstrained_ExactSize(t *testing.T) {
 			}
 			if got := lipgloss.Width(out); got != leftWidth {
 				t.Errorf("pane width = %d, want %d", got, leftWidth)
+			}
+		})
+	}
+}
+
+// wideDelegate renders every row twice as wide as the list.
+type wideDelegate struct{}
+
+func (wideDelegate) Height() int                             { return 1 }
+func (wideDelegate) Spacing() int                            { return 0 }
+func (wideDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
+func (wideDelegate) Render(w io.Writer, m list.Model, _ int, _ list.Item) {
+	fmt.Fprint(w, strings.Repeat("x", 2*m.Width()))
+}
+
+func TestListViewContentClipsWideRows(t *testing.T) {
+	items := make([]ui.FlatItem, 30)
+	for i := range items {
+		items[i] = ui.FlatItem{Bean: &bean.Bean{ID: fmt.Sprintf("beans-%04d", i), Status: "todo", Type: "task"}, Matched: true}
+	}
+
+	for _, sz := range [][2]int{{40, 5}, {80, 15}, {120, 26}} {
+		width, innerHeight := sz[0], sz[1]
+		t.Run(fmt.Sprintf("%dx%d", width, innerHeight), func(t *testing.T) {
+			m := newListModel(nil, config.Default())
+			m, _ = m.Update(tea.WindowSizeMsg{Width: width, Height: innerHeight + 10})
+			m, _ = m.Update(beansLoadedMsg{items: items, idColWidth: 12})
+			m.width = width
+			m.list.SetSize(width-paneBorders, innerHeight)
+			m.list.SetDelegate(wideDelegate{})
+
+			out := m.viewContent(innerHeight)
+			if got := lipgloss.Height(out); got != innerHeight+paneBorders {
+				t.Errorf("pane height = %d, want %d", got, innerHeight+paneBorders)
+			}
+			if got := lipgloss.Width(out); got != width {
+				t.Errorf("pane width = %d, want %d", got, width)
 			}
 		})
 	}
