@@ -628,7 +628,9 @@ func (m listModel) viewContent(innerHeight int) string {
 		Width(m.width - paneBorders).
 		Height(innerHeight)
 
-	return withBorderTitle(border.Render(m.list.View()), m.borderTitle())
+	// Clip the content so an over-wide row cannot wrap and grow the pane.
+	content := lipgloss.NewStyle().MaxWidth(m.width - paneBorders).MaxHeight(innerHeight).Render(m.list.View())
+	return withBorderTitle(border.Render(content), m.borderTitle())
 }
 
 // borderTitle is the filter input while the user types a filter, else the title.

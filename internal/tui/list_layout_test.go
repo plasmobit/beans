@@ -55,13 +55,13 @@ func TestListViewConstrained_ExactSize(t *testing.T) {
 	for i := range 30 {
 		items = append(items, ui.FlatItem{
 			Bean:           &bean.Bean{ID: fmt.Sprintf("beans-%04d", i), Title: "A child title long enough to be truncated", Status: "completed", Type: "task"},
-			Depth:          1 + i%3,
+			Depth:          1 + i%6,
 			Matched:        true,
-			TreePrefix:     strings.Repeat("│  ", i%3) + "├─",
+			TreePrefix:     strings.Repeat("│  ", i%6) + "├─",
 			ImplicitStatus: "completed",
 		})
 	}
-	const idColWidth = 10 + 2 + 3*3
+	const idColWidth = 10 + 2 + 6*3
 
 	for _, sz := range [][2]int{{120, 27}, {120, 28}, {140, 40}} {
 		width, height := sz[0], sz[1]

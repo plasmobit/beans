@@ -1,11 +1,11 @@
 ---
 # beans-1q77
 title: TUI two-column view overflows terminal height at 120x28
-status: in-progress
+status: completed
 type: bug
 priority: normal
 created_at: 2026-10-01T09:03:53Z
-updated_at: 2026-10-01T09:45:18Z
+updated_at: 2026-10-06T12:47:24Z
 ---
 
 At terminal size 120x28 the two-column TUI renders more lines than the terminal height; the top scrolls out of view. 120x27 and 119x28 render correctly.
@@ -13,7 +13,7 @@ At terminal size 120x28 the two-column TUI renders more lines than the terminal 
 - [x] Reproduce with a test rendering App.View() at 120x28
 - [x] Identify the overflowing pane/row
 - [x] Fix root cause
-- [ ] Guard pane heights
+- [x] Guard pane heights
 
 ## Root cause
 
@@ -23,4 +23,8 @@ At terminal size 120x28 the two-column TUI renders more lines than the terminal 
 
 The width fix in `RenderBeanRow` is superseded by beans-5fp6: the marker moved from a title suffix into the status column (`↑T`), so annotated rows have the same width as plain ones. `TestListViewConstrained_ExactSize` guards the pane size.
 
-Open: whether `ViewConstrained` should additionally clip to its height (last todo).
+## Summary of Changes
+
+- Root cause fixed via beans-5fp6 (status marker moved into the status column).
+- `viewContent` clips the list content to the pane's inner width and height, so an over-wide row can no longer wrap and grow the pane.
+- `TestListViewConstrained_ExactSize` uses tree depths up to 6; without the clip it renders 69 instead of 26 rows at 120x27.
