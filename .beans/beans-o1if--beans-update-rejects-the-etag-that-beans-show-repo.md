@@ -76,12 +76,22 @@ Generator: both sides of step 4 come from the in-memory bean, so `Bean.ETag()` (
 ## Summary of Changes
 
 - `Bean.Clone()` (`pkg/bean/bean.go`) deep-copies a bean: `Tags`, `Blocking`, `BlockedBy`, `Properties`, and the timestamp pointers.
-- `Core.Update(b, base, opts...)` (`pkg/beancore/core.go`) is the compare-and-swap. `base` is the ETag of the stored bean the caller cloned. Update writes only if the stored bean still has that ETag, and returns `ETagMismatchError` otherwise, also when the client sent no `ifMatch`. The file-byte branch is gone; `Bean.ETag()` serves reads and the check.
+- `Core.Update(b, base, opts...)` (`pkg/beancore/core.go`) is the compare-and-swap. `base` is the ETag of the stored bean the caller cloned. Update writes only if the stored bean still has that ETag, and returns `ETagMismatchError` with `Concurrent: true` otherwise, also when the client sent no `ifMatch`. `Concurrent` selects the message "bean changed concurrently", so the error does not claim an etag the client never sent. The file-byte branch is gone; `Bean.ETag()` serves reads and the check.
 - `CoreResolver.cloneForUpdate` (`pkg/beangraph/resolver.go`) runs steps 1 and 2: get, clone, `base := clone.ETag()`, and `validateETag`. `validateETag` also holds the `require_if_match` check and returns the `beancore` error types. The duplicate `beangraph.ETag*Error` types are removed.
 - `UpdateBean` and the five relationship mutations modify the clone. The relationship validators change only the bean they are given, never the target bean.
 - `Core.DetectCycleWith(pending, ...)` (`pkg/beancore/links.go`) traverses the store with the clone in place of its stored version. Without it, a request that adds `blocking: X` and `blocked_by: X` together passes the cycle check, because the stored bean no longer carries the first edge.
 - The TUI editor path (`internal/tui/tui.go`) updates a clone of the reloaded bean.
+- `Bean.ApplyDefaults()` (`pkg/bean/bean.go`) fills `type`, `priority`, `tags` and `blocking`. `loadBean`, `loadBeanFrom`, `Create` and `Update` all call it, so a stored bean renders the same before and after a reload and keeps its ETag.
 
 `Core.Get` still returns the stored pointer. Its callers are audited: none outside `beancore` modifies the result.
 
-Open: `Core.Archive`, `Unarchive`, `LoadAndUnarchive`, `RemoveLinksTo` and `FixBrokenLinks` still modify stored beans in place. They hold the write lock, so readers do not race with them, but a reader that got the pointer from `Get` earlier sees the change.
+Open: `Core.Archive`, `Unarchive`, `LoadAndUnarchive`, `RemoveLinksTo` and `FixBrokenLinks` still modify stored beans in place under the write lock. A reader that holds a pointer from `Get` reads the same fields without a lock, so these writers race with it: `cloneForUpdate`, the GraphQL field resolvers and `output.NewBean` all read that way. beans-6we9 makes them clone, modify and swap.
+
+## Review (opencode, 6a80b60)
+
+- `Create`/`Update` stored a bean without the defaults `loadBean` fills, so its ETag changed on the next reload (`create --json` etag rejected by `update --if-match`; watcher reload failing a CAS without `ifMatch`): applied; `Bean.ApplyDefaults` in all four paths, `TestStoredETagSurvivesReload` fails without it.
+- Summary claimed in-place writers do not race with readers: applied; sentence corrected above. The code fix is beans-6we9.
+- Rewrite lost the empty-`ifMatch` case under `require_if_match`: applied; case added to `TestRequireIfMatchConfig`.
+- Test case "file identical to its rendered form" was not identical (missing `# probe-1`): applied; content fixed, and the test asserts the claim.
+- CAS mismatch reported an etag the client never sent: applied; `ETagMismatchError.Concurrent` selects "bean changed concurrently", asserted in both directions.
+- Cycle check across two beans is check-then-act (two requests adding `X blocking Y` and `Y blocking X`): rejected for this bean; the race predates the fix, since `DetectCycle` never ran under the write lock. Recorded in beans-6we9.
