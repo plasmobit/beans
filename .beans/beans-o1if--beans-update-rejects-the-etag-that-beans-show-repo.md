@@ -5,7 +5,7 @@ status: todo
 type: bug
 priority: normal
 created_at: 2026-10-08T13:51:47Z
-updated_at: 2026-10-08T13:52:17Z
+updated_at: 2026-10-08T14:04:30Z
 ---
 
 `beans update --if-match` rejects the etag that `beans show` reports, for every bean whose file differs from its rendered form. The cause is that `updateBean` modifies the stored bean before the etag check, and `Core.Update` works around that by hashing a different input than `Bean.ETag()`.
@@ -64,7 +64,7 @@ Generator: both sides of step 4 come from the in-memory bean, so `Bean.ETag()` (
 
 ## Todo
 
-- [ ] Decide the generator: rendered hash everywhere, or recorded file hash
+- [x] Decide the generator: rendered hash everywhere (`Bean.ETag()`); the file-byte branch goes away
 - [ ] Add a deep `Clone()` to `bean.Bean` with a test that mutating the clone leaves the original unchanged
 - [ ] `Core.Get` returns a clone, or its callers are audited to treat the result as read-only
 - [ ] Every caller of `Core.Update` clones, rejects early, and modifies the clone: `UpdateBean` and the five relationship mutations (`pkg/beangraph/mutations.go:236,306,340,356,389,405`), and the TUI (`internal/tui/tui.go:658`)
