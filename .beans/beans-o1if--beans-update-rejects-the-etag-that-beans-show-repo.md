@@ -1,11 +1,11 @@
 ---
 # beans-o1if
 title: beans update rejects the etag that beans show reports
-status: in-progress
+status: completed
 type: bug
 priority: normal
 created_at: 2026-10-08T13:51:47Z
-updated_at: 2026-10-08T14:43:30Z
+updated_at: 2026-10-08T14:45:07Z
 ---
 
 `beans update --if-match` rejects the etag that `beans show` reports, for every bean whose file differs from its rendered form. The cause is that `updateBean` modifies the stored bean before the etag check, and `Core.Update` works around that by hashing a different input than `Bean.ETag()`.
@@ -70,5 +70,18 @@ Generator: both sides of step 4 come from the in-memory bean, so `Bean.ETag()` (
 - [x] Every caller of `Core.Update` clones, rejects early, and modifies the clone: `UpdateBean` and the five relationship mutations (`pkg/beangraph/mutations.go:236,306,340,356,389,405`), and the TUI (`internal/tui/tui.go:658`)
 - [x] `Core.Update`: compare-and-swap against `base` under the write lock; remove the file-byte branch (or replace it by the recorded hash)
 - [x] Step 2 (early reject) uses `validateETag` (`pkg/beangraph/resolver.go:40`), as `.claude/rules/backend.md` asks of resolvers
-- [ ] Tests: `show` etag accepted by `update` for a file without `priority:`; dirty bean with `If-Match`; rejected update leaves the stored bean unchanged; two concurrent updates with the same `base`, exactly one succeeds
-- [ ] `mise test`
+- [x] Tests: `show` etag accepted by `update` for a file without `priority:`; dirty bean with `If-Match`; rejected update leaves the stored bean unchanged; two concurrent updates with the same `base`, exactly one succeeds
+- [x] `mise test` (Go part: `go test ./...`; `mise` is not installed in the implementing environment)
+
+## Summary of Changes
+
+- `Bean.Clone()` (`pkg/bean/bean.go`) deep-copies a bean: `Tags`, `Blocking`, `BlockedBy`, `Properties`, and the timestamp pointers.
+- `Core.Update(b, base, opts...)` (`pkg/beancore/core.go`) is the compare-and-swap. `base` is the ETag of the stored bean the caller cloned. Update writes only if the stored bean still has that ETag, and returns `ETagMismatchError` otherwise, also when the client sent no `ifMatch`. The file-byte branch is gone; `Bean.ETag()` serves reads and the check.
+- `CoreResolver.cloneForUpdate` (`pkg/beangraph/resolver.go`) runs steps 1 and 2: get, clone, `base := clone.ETag()`, and `validateETag`. `validateETag` also holds the `require_if_match` check and returns the `beancore` error types. The duplicate `beangraph.ETag*Error` types are removed.
+- `UpdateBean` and the five relationship mutations modify the clone. The relationship validators change only the bean they are given, never the target bean.
+- `Core.DetectCycleWith(pending, ...)` (`pkg/beancore/links.go`) traverses the store with the clone in place of its stored version. Without it, a request that adds `blocking: X` and `blocked_by: X` together passes the cycle check, because the stored bean no longer carries the first edge.
+- The TUI editor path (`internal/tui/tui.go`) updates a clone of the reloaded bean.
+
+`Core.Get` still returns the stored pointer. Its callers are audited: none outside `beancore` modifies the result.
+
+Open: `Core.Archive`, `Unarchive`, `LoadAndUnarchive`, `RemoveLinksTo` and `FixBrokenLinks` still modify stored beans in place. They hold the write lock, so readers do not race with them, but a reader that got the pointer from `Get` earlier sees the change.
