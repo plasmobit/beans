@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"hash/fnv"
 	"io"
+	"maps"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -182,6 +184,27 @@ type Bean struct {
 
 	// Properties holds user-defined key-value pairs.
 	Properties map[string]string `yaml:"properties,omitempty" json:"properties,omitempty"`
+}
+
+// Clone returns a deep copy of b. Writers modify a clone and hand it to
+// beancore.Core.Update, so the bean stored in Core is never modified in place.
+func (b *Bean) Clone() *Bean {
+	c := *b
+	c.Tags = slices.Clone(b.Tags)
+	c.Blocking = slices.Clone(b.Blocking)
+	c.BlockedBy = slices.Clone(b.BlockedBy)
+	c.Properties = maps.Clone(b.Properties)
+	c.CreatedAt = cloneTime(b.CreatedAt)
+	c.UpdatedAt = cloneTime(b.UpdatedAt)
+	return &c
+}
+
+func cloneTime(t *time.Time) *time.Time {
+	if t == nil {
+		return nil
+	}
+	c := *t
+	return &c
 }
 
 // frontMatter is the subset of Bean that gets serialized to YAML front matter.
