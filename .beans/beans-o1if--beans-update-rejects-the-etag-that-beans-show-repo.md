@@ -1,11 +1,11 @@
 ---
 # beans-o1if
 title: beans update rejects the etag that beans show reports
-status: todo
+status: in-progress
 type: bug
 priority: normal
 created_at: 2026-10-08T13:51:47Z
-updated_at: 2026-10-08T14:04:30Z
+updated_at: 2026-10-08T14:43:30Z
 ---
 
 `beans update --if-match` rejects the etag that `beans show` reports, for every bean whose file differs from its rendered form. The cause is that `updateBean` modifies the stored bean before the etag check, and `Core.Update` works around that by hashing a different input than `Bean.ETag()`.
@@ -65,10 +65,10 @@ Generator: both sides of step 4 come from the in-memory bean, so `Bean.ETag()` (
 ## Todo
 
 - [x] Decide the generator: rendered hash everywhere (`Bean.ETag()`); the file-byte branch goes away
-- [ ] Add a deep `Clone()` to `bean.Bean` with a test that mutating the clone leaves the original unchanged
-- [ ] `Core.Get` returns a clone, or its callers are audited to treat the result as read-only
-- [ ] Every caller of `Core.Update` clones, rejects early, and modifies the clone: `UpdateBean` and the five relationship mutations (`pkg/beangraph/mutations.go:236,306,340,356,389,405`), and the TUI (`internal/tui/tui.go:658`)
-- [ ] `Core.Update`: compare-and-swap against `base` under the write lock; remove the file-byte branch (or replace it by the recorded hash)
-- [ ] Step 2 (early reject) uses `validateETag` (`pkg/beangraph/resolver.go:40`), as `.claude/rules/backend.md` asks of resolvers
+- [x] Add a deep `Clone()` to `bean.Bean` with a test that mutating the clone leaves the original unchanged
+- [x] `Core.Get` returns a clone, or its callers are audited to treat the result as read-only
+- [x] Every caller of `Core.Update` clones, rejects early, and modifies the clone: `UpdateBean` and the five relationship mutations (`pkg/beangraph/mutations.go:236,306,340,356,389,405`), and the TUI (`internal/tui/tui.go:658`)
+- [x] `Core.Update`: compare-and-swap against `base` under the write lock; remove the file-byte branch (or replace it by the recorded hash)
+- [x] Step 2 (early reject) uses `validateETag` (`pkg/beangraph/resolver.go:40`), as `.claude/rules/backend.md` asks of resolvers
 - [ ] Tests: `show` etag accepted by `update` for a file without `priority:`; dirty bean with `If-Match`; rejected update leaves the stored bean unchanged; two concurrent updates with the same `base`, exactly one succeeds
 - [ ] `mise test`

@@ -107,7 +107,7 @@ func (r *CoreResolver) CreateBean(ctx context.Context, input model.CreateBeanInp
 
 // UpdateBean updates an existing bean.
 func (r *CoreResolver) UpdateBean(ctx context.Context, id string, input model.UpdateBeanInput, opts ...beancore.UpdateOption) (*bean.Bean, error) {
-	b, err := r.Core.Get(id)
+	b, base, err := r.cloneForUpdate(id, input.IfMatch)
 	if err != nil {
 		return nil, err
 	}
@@ -231,9 +231,8 @@ func (r *CoreResolver) UpdateBean(ctx context.Context, id string, input model.Up
 		r.RemoveBlockedByRelationships(b, input.RemoveBlockedBy)
 	}
 
-	// ETag validation now happens inside Update() under write lock.
 	// If the bean is linked to a worktree, Core auto-routes the write there.
-	if err := r.Core.Update(b, input.IfMatch, opts...); err != nil {
+	if err := r.Core.Update(b, base, opts...); err != nil {
 		return nil, err
 	}
 
@@ -279,7 +278,7 @@ func (r *CoreResolver) DeleteBean(ctx context.Context, id string) (bool, error) 
 
 // SetParent sets or clears the parent of a bean.
 func (r *CoreResolver) SetParent(ctx context.Context, id string, parentID *string, ifMatch *string) (*bean.Bean, error) {
-	b, err := r.Core.Get(id)
+	b, base, err := r.cloneForUpdate(id, ifMatch)
 	if err != nil {
 		return nil, err
 	}
@@ -296,14 +295,13 @@ func (r *CoreResolver) SetParent(ctx context.Context, id string, parentID *strin
 			return nil, err
 		}
 		// Check for cycles
-		if cycle := r.Core.DetectCycle(b.ID, "parent", newParent); cycle != nil {
+		if cycle := r.Core.DetectCycleWith(b, b.ID, "parent", newParent); cycle != nil {
 			return nil, fmt.Errorf("would create cycle: %v", cycle)
 		}
 	}
 
 	b.Parent = newParent
-	// ETag validation now happens inside Update() under write lock
-	if err := r.Core.Update(b, ifMatch); err != nil {
+	if err := r.Core.Update(b, base); err != nil {
 		return nil, err
 	}
 	return b, nil
@@ -311,7 +309,7 @@ func (r *CoreResolver) SetParent(ctx context.Context, id string, parentID *strin
 
 // AddBlocking adds a blocking relationship.
 func (r *CoreResolver) AddBlocking(ctx context.Context, id string, targetID string, ifMatch *string) (*bean.Bean, error) {
-	b, err := r.Core.Get(id)
+	b, base, err := r.cloneForUpdate(id, ifMatch)
 	if err != nil {
 		return nil, err
 	}
@@ -329,15 +327,15 @@ func (r *CoreResolver) AddBlocking(ctx context.Context, id string, targetID stri
 	}
 
 	// Check for cycles in both directions
-	if cycle := r.Core.DetectCycle(b.ID, "blocking", normalizedTargetID); cycle != nil {
+	if cycle := r.Core.DetectCycleWith(b, b.ID, "blocking", normalizedTargetID); cycle != nil {
 		return nil, fmt.Errorf("would create cycle: %v", cycle)
 	}
-	if cycle := r.Core.DetectCycle(normalizedTargetID, "blocked_by", b.ID); cycle != nil {
+	if cycle := r.Core.DetectCycleWith(b, normalizedTargetID, "blocked_by", b.ID); cycle != nil {
 		return nil, fmt.Errorf("would create cycle: %v", cycle)
 	}
 
 	b.AddBlocking(normalizedTargetID)
-	if err := r.Core.Update(b, ifMatch); err != nil {
+	if err := r.Core.Update(b, base); err != nil {
 		return nil, err
 	}
 	return b, nil
@@ -345,7 +343,7 @@ func (r *CoreResolver) AddBlocking(ctx context.Context, id string, targetID stri
 
 // RemoveBlocking removes a blocking relationship.
 func (r *CoreResolver) RemoveBlocking(ctx context.Context, id string, targetID string, ifMatch *string) (*bean.Bean, error) {
-	b, err := r.Core.Get(id)
+	b, base, err := r.cloneForUpdate(id, ifMatch)
 	if err != nil {
 		return nil, err
 	}
@@ -353,7 +351,7 @@ func (r *CoreResolver) RemoveBlocking(ctx context.Context, id string, targetID s
 	normalizedTargetID, _ := r.Core.NormalizeID(targetID)
 
 	b.RemoveBlocking(normalizedTargetID)
-	if err := r.Core.Update(b, ifMatch); err != nil {
+	if err := r.Core.Update(b, base); err != nil {
 		return nil, err
 	}
 	return b, nil
@@ -361,7 +359,7 @@ func (r *CoreResolver) RemoveBlocking(ctx context.Context, id string, targetID s
 
 // AddBlockedBy adds a blocked-by relationship.
 func (r *CoreResolver) AddBlockedBy(ctx context.Context, id string, targetID string, ifMatch *string) (*bean.Bean, error) {
-	b, err := r.Core.Get(id)
+	b, base, err := r.cloneForUpdate(id, ifMatch)
 	if err != nil {
 		return nil, err
 	}
@@ -378,15 +376,15 @@ func (r *CoreResolver) AddBlockedBy(ctx context.Context, id string, targetID str
 	}
 
 	// Check for cycles in both directions
-	if cycle := r.Core.DetectCycle(normalizedTargetID, "blocking", b.ID); cycle != nil {
+	if cycle := r.Core.DetectCycleWith(b, normalizedTargetID, "blocking", b.ID); cycle != nil {
 		return nil, fmt.Errorf("would create cycle: %v", cycle)
 	}
-	if cycle := r.Core.DetectCycle(b.ID, "blocked_by", normalizedTargetID); cycle != nil {
+	if cycle := r.Core.DetectCycleWith(b, b.ID, "blocked_by", normalizedTargetID); cycle != nil {
 		return nil, fmt.Errorf("would create cycle: %v", cycle)
 	}
 
 	b.AddBlockedBy(normalizedTargetID)
-	if err := r.Core.Update(b, ifMatch); err != nil {
+	if err := r.Core.Update(b, base); err != nil {
 		return nil, err
 	}
 	return b, nil
@@ -394,7 +392,7 @@ func (r *CoreResolver) AddBlockedBy(ctx context.Context, id string, targetID str
 
 // RemoveBlockedBy removes a blocked-by relationship.
 func (r *CoreResolver) RemoveBlockedBy(ctx context.Context, id string, targetID string, ifMatch *string) (*bean.Bean, error) {
-	b, err := r.Core.Get(id)
+	b, base, err := r.cloneForUpdate(id, ifMatch)
 	if err != nil {
 		return nil, err
 	}
@@ -402,7 +400,7 @@ func (r *CoreResolver) RemoveBlockedBy(ctx context.Context, id string, targetID 
 	normalizedTargetID, _ := r.Core.NormalizeID(targetID)
 
 	b.RemoveBlockedBy(normalizedTargetID)
-	if err := r.Core.Update(b, ifMatch); err != nil {
+	if err := r.Core.Update(b, base); err != nil {
 		return nil, err
 	}
 	return b, nil

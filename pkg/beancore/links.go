@@ -89,6 +89,13 @@ func (c *Core) FindIncomingLinks(targetID string) []IncomingLink {
 // Checks for blocking, blocked_by, and parent link types.
 // Returns the cycle path if a cycle would be created, nil otherwise.
 func (c *Core) DetectCycle(fromID, linkType, toID string) []string {
+	return c.DetectCycleWith(nil, fromID, linkType, toID)
+}
+
+// DetectCycleWith is DetectCycle on the store with pending in place of the
+// stored bean pending.ID, so links a caller has added to its clone but not
+// yet stored take part in the check. A nil pending checks the store as is.
+func (c *Core) DetectCycleWith(pending *bean.Bean, fromID, linkType, toID string) []string {
 	// Only check hierarchical link types
 	if linkType != "blocking" && linkType != "blocked_by" && linkType != "parent" {
 		return nil
@@ -103,12 +110,12 @@ func (c *Core) DetectCycle(fromID, linkType, toID string) []string {
 	visited := make(map[string]bool)
 	path := []string{fromID, toID}
 
-	return c.findPathToTarget(toID, fromID, linkType, visited, path)
+	return c.findPathToTarget(pending, toID, fromID, linkType, visited, path)
 }
 
 // findPathToTarget uses DFS to find if there's a path from current to target.
 // Returns the path if found, nil otherwise.
-func (c *Core) findPathToTarget(current, target, linkType string, visited map[string]bool, path []string) []string {
+func (c *Core) findPathToTarget(pending *bean.Bean, current, target, linkType string, visited map[string]bool, path []string) []string {
 	if current == target {
 		return path
 	}
@@ -119,6 +126,9 @@ func (c *Core) findPathToTarget(current, target, linkType string, visited map[st
 	visited[current] = true
 
 	b, ok := c.beans[current]
+	if pending != nil && pending.ID == current {
+		b, ok = pending, true
+	}
 	if !ok {
 		return nil
 	}
@@ -138,7 +148,7 @@ func (c *Core) findPathToTarget(current, target, linkType string, visited map[st
 
 	for _, t := range targets {
 		newPath := append(path, t)
-		if result := c.findPathToTarget(t, target, linkType, visited, newPath); result != nil {
+		if result := c.findPathToTarget(pending, t, target, linkType, visited, newPath); result != nil {
 			return result
 		}
 	}

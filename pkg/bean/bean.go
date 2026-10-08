@@ -207,6 +207,25 @@ func cloneTime(t *time.Time) *time.Time {
 	return &c
 }
 
+// ApplyDefaults fills the fields that GraphQL declares non-nullable. Every
+// bean that Core stores goes through it, whether loaded, created or updated,
+// so a stored bean renders the same before and after a reload and keeps its
+// ETag.
+func (b *Bean) ApplyDefaults() {
+	if b.Type == "" {
+		b.Type = "task"
+	}
+	if b.Priority == "" {
+		b.Priority = "normal"
+	}
+	if b.Tags == nil {
+		b.Tags = []string{}
+	}
+	if b.Blocking == nil {
+		b.Blocking = []string{}
+	}
+}
+
 // frontMatter is the subset of Bean that gets serialized to YAML front matter.
 type frontMatter struct {
 	Title     string     `yaml:"title"`
