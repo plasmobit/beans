@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/hmans/beans/internal/agent"
+	"github.com/hmans/beans/internal/gittest"
 	"github.com/hmans/beans/pkg/beangraph"
 	"github.com/hmans/beans/pkg/beangraph/model"
 	"github.com/hmans/beans/pkg/bean"
@@ -3346,6 +3347,7 @@ func TestListFiles(t *testing.T) {
 	}
 
 	run("init", "-b", "main")
+	gittest.RequireGitDirInside(t, tmpDir)
 	run("config", "user.email", "test@test.com")
 	run("config", "user.name", "Test")
 
