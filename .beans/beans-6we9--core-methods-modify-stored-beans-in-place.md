@@ -5,7 +5,7 @@ status: completed
 type: bug
 priority: normal
 created_at: 2026-10-08T15:40:29Z
-updated_at: 2026-10-12T10:03:44Z
+updated_at: 2026-10-12T13:59:12Z
 ---
 
 Five `Core` methods modify beans stored in `c.beans` in place, under the write lock. `Core.Get` returns the stored pointer and releases its read lock, so a reader that holds that pointer reads the same fields without a lock. The two accesses race.
@@ -50,3 +50,5 @@ Related: beans-qypq covers concurrent writers across processes. The `Core.mu` lo
 Not changed: `RemoveLinksTo` and `FixBrokenLinks` still write every changed bean to the main `.beans/`, also a dirty or worktree-linked one, and send no subscriber events.
 
 Follow-ups: beans-9sxr (`findCycles` returns corrupted cycle paths), beans-unjf (`Create` misses cycles that its new links close).
+
+Follow-up: beans-xg8t (routing and events of `RemoveLinksTo`/`FixBrokenLinks`).
