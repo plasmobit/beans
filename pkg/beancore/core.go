@@ -433,10 +433,12 @@ func (c *Core) SaveDirty() (int, error) {
 			continue
 		}
 
+		b = b.Clone()
 		if err := c.saveToDisk(b); err != nil {
 			return saved, fmt.Errorf("saving bean %s: %w", id, err)
 		}
 
+		c.beans[id] = b
 		delete(c.dirty, id)
 		saved++
 	}
@@ -459,10 +461,12 @@ func (c *Core) SaveBean(id string) error {
 		return ErrNotFound
 	}
 
+	b = b.Clone()
 	if err := c.saveToDisk(b); err != nil {
 		return fmt.Errorf("saving bean %s: %w", id, err)
 	}
 
+	c.beans[id] = b
 	delete(c.dirty, id)
 	return nil
 }
@@ -529,6 +533,8 @@ func (c *Core) Create(b *bean.Bean, opts ...UpdateOption) error {
 // base is the ETag of the stored bean that b was cloned from; Update writes
 // only if the stored bean still has that ETag, and otherwise returns
 // ETagMismatchError, so concurrent writers cannot overwrite each other.
+// It returns CycleError if a parent, blocking or blocked_by link that b adds
+// would close a cycle with the links stored now.
 // By default, persists to disk. Use WithPersist(false) to only update runtime state.
 func (c *Core) Update(b *bean.Bean, base string, opts ...UpdateOption) error {
 	o := defaultUpdateOptions()
@@ -546,6 +552,10 @@ func (c *Core) Update(b *bean.Bean, base string, opts ...UpdateOption) error {
 
 	if current := storedBean.ETag(); current != base {
 		return &ETagMismatchError{Provided: base, Current: current, Concurrent: true}
+	}
+
+	if err := c.addedLinkCycleLocked(storedBean, b); err != nil {
+		return err
 	}
 
 	b.ApplyDefaults()
@@ -725,13 +735,14 @@ func (c *Core) Archive(id string) error {
 	}
 
 	// Update bean's path in store and notify subscribers
-	targetBean.Path = newRelPath
-	c.beans[targetID] = targetBean
+	updated := targetBean.Clone()
+	updated.Path = newRelPath
+	c.beans[targetID] = updated
 	c.mu.Unlock()
 
 	c.fanOut([]BeanEvent{{
 		Type:   EventUpdated,
-		Bean:   targetBean,
+		Bean:   updated,
 		BeanID: targetID,
 	}})
 
@@ -765,8 +776,9 @@ func (c *Core) Unarchive(id string) error {
 	}
 
 	// Update bean's path
-	targetBean.Path = newRelPath
-	c.beans[targetID] = targetBean
+	updated := targetBean.Clone()
+	updated.Path = newRelPath
+	c.beans[targetID] = updated
 
 	return nil
 }
@@ -878,10 +890,11 @@ func (c *Core) LoadAndUnarchive(id string) (*bean.Bean, error) {
 	}
 
 	// Update bean's path
-	b.Path = newRelPath
-	c.beans[targetID] = b
+	updated := b.Clone()
+	updated.Path = newRelPath
+	c.beans[targetID] = updated
 
-	return b, nil
+	return updated, nil
 }
 
 // Init creates the .beans directory if it doesn't exist,

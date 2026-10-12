@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -2124,6 +2125,76 @@ func TestStoredETagSurvivesReload(t *testing.T) {
 			reloaded, _ := core.Get("reload-1")
 			if got := reloaded.ETag(); got != before {
 				t.Errorf("ETag after reload = %s, want %s (stored priority %q, type %q)", got, before, stored.Priority, stored.Type)
+			}
+		})
+	}
+}
+
+func TestWritersLeaveHeldBeansUnchanged(t *testing.T) {
+	archived := func(t *testing.T, core *Core) {
+		createTestBean(t, core, "held", "Held", "completed")
+		if err := core.Archive("held"); err != nil {
+			t.Fatalf("Archive() error = %v", err)
+		}
+	}
+	plain := func(t *testing.T, core *Core) {
+		createTestBean(t, core, "held", "Held", "todo")
+	}
+	linked := func(t *testing.T, core *Core) {
+		createTestBean(t, core, "gone", "Gone", "todo")
+		b := &bean.Bean{ID: "held", Title: "Held", Status: "todo",
+			Parent: "gone", Blocking: []string{"gone"}, BlockedBy: []string{"gone"}}
+		if err := core.Create(b); err != nil {
+			t.Fatalf("Create() error = %v", err)
+		}
+	}
+	unsaved := func(t *testing.T, core *Core) {
+		b := &bean.Bean{ID: "held", Title: "Held", Status: "todo"}
+		if err := core.Create(b, WithPersist(false)); err != nil {
+			t.Fatalf("Create() error = %v", err)
+		}
+	}
+
+	tests := []struct {
+		name  string
+		setup func(*testing.T, *Core)
+		write func(*Core) error
+	}{
+		{"Archive", plain, func(c *Core) error { return c.Archive("held") }},
+		{"Unarchive", archived, func(c *Core) error { return c.Unarchive("held") }},
+		{"LoadAndUnarchive", archived, func(c *Core) error { _, err := c.LoadAndUnarchive("held"); return err }},
+		{"RemoveLinksTo", linked, func(c *Core) error { _, err := c.RemoveLinksTo("gone"); return err }},
+		{"FixBrokenLinks", linked, func(c *Core) error {
+			if err := c.Delete("gone"); err != nil {
+				return err
+			}
+			_, err := c.FixBrokenLinks()
+			return err
+		}},
+		{"SaveDirty", unsaved, func(c *Core) error { _, err := c.SaveDirty(); return err }},
+		{"SaveBean", unsaved, func(c *Core) error { return c.SaveBean("held") }},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			core, _ := setupTestCore(t)
+			tt.setup(t, core)
+			held, err := core.Get("held")
+			if err != nil {
+				t.Fatalf("Get() error = %v", err)
+			}
+			snapshot := held.Clone()
+
+			if err := tt.write(core); err != nil {
+				t.Fatalf("write error = %v", err)
+			}
+
+			if !reflect.DeepEqual(held, snapshot) {
+				t.Errorf("%s modified the bean a reader holds:\n got  %+v\n want %+v", tt.name, held, snapshot)
+			}
+			stored, _ := core.Get("held")
+			if stored == held {
+				t.Errorf("%s did not store a new bean", tt.name)
 			}
 		})
 	}
