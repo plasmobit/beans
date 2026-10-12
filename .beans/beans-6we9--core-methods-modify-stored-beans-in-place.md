@@ -3,8 +3,9 @@
 title: Core methods modify stored beans in place
 status: todo
 type: bug
+priority: normal
 created_at: 2026-10-08T15:40:29Z
-updated_at: 2026-10-08T15:40:29Z
+updated_at: 2026-10-12T08:43:00Z
 ---
 
 Five `Core` methods modify beans stored in `c.beans` in place, under the write lock. `Core.Get` returns the stored pointer and releases its read lock, so a reader that holds that pointer reads the same fields without a lock. The two accesses race.
@@ -33,3 +34,5 @@ The relationship validators run `DetectCycleWith` before `Core.Update` takes the
 - [ ] Test under `-race`: `RemoveLinksTo` concurrent with `Clone` of a bean it changes
 - [ ] Decide the cycle race: re-run the cycle check under the write lock (e.g. a validator callback in `Core.Update`), or accept and document it
 - [ ] `mise test`
+
+Related: beans-qypq covers concurrent writers across processes. The `Core.mu` lock that this bean relies on orders goroutines inside one process only.
