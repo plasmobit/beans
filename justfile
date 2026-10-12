@@ -1,4 +1,4 @@
-# Mirrors the tasks in mise.toml for machines without mise.
+# Build, test, dev and release tasks; `just --list` shows them.
 # Requires go, node and corepack on PATH; pnpm is run through corepack.
 # Node 25+ no longer bundles corepack: install it with `npm install -g corepack`.
 # wgo and svu are run with `go run`, so they need no install either.

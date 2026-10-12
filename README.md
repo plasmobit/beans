@@ -43,16 +43,12 @@ We'll need to do three things:
 2. Configure your project to use it.
 3. Configure your coding agent to interact with it.
 
-This fork publishes no releases yet, so build it from source. The build needs Go, Node.js, and pnpm, plus either [mise](https://mise.jdx.dev/) or [just](https://just.systems/):
+This fork publishes no releases yet, so build it from source. The build needs Go, Node.js with corepack (pnpm runs through it), and [just](https://just.systems/):
 
 ```bash
 git clone https://github.com/plasmobit/beans.git
 cd beans
 
-# with mise (also installs Go, Node.js, and pnpm)
-mise install && mise run setup && mise run install
-
-# or with just (Go and Node.js must be on PATH; pnpm runs through corepack)
 just setup && just install
 ```
 

@@ -7,11 +7,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 # Make sure we have an embedded frontend built
 if [ ! -f "$PROJECT_ROOT/internal/web/dist/index.html" ]; then
 	echo "Building frontend..."
-	if command -v mise >/dev/null; then
-		mise run build:embed
-	else
-		just --justfile "$PROJECT_ROOT/justfile" build-embed
-	fi
+	just --justfile "$PROJECT_ROOT/justfile" build-embed
 fi
 
 # Pre-build both binaries so tests don't pay compilation cost
