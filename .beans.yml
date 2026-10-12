@@ -21,9 +21,9 @@ worktree:
   base_ref: origin/main
   integrate: pr
   # Shell command to run inside a worktree after creation (e.g. "pnpm install")
-  setup: mise trust && mise setup
+  setup: just setup
   # Shell command to run the project (adds a "Run" button to workspace toolbar)
-  run: mise dev
+  run: just dev
 agent:
   # Enable agent functionality in the web UI (true, false)
   enabled: true
