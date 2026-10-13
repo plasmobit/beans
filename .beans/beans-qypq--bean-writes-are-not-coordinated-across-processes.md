@@ -5,7 +5,8 @@ status: todo
 type: bug
 priority: high
 created_at: 2026-10-12T08:42:53Z
-updated_at: 2026-10-13T09:30:36Z
+updated_at: 2026-10-13T11:53:44Z
+parent: beans-5txp
 blocked_by:
     - beans-26we
     - beans-xg8t

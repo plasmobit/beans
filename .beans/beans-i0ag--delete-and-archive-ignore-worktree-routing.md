@@ -5,7 +5,8 @@ status: todo
 type: bug
 priority: normal
 created_at: 2026-10-13T09:29:55Z
-updated_at: 2026-10-13T09:29:55Z
+updated_at: 2026-10-13T11:53:44Z
+parent: beans-oyic
 ---
 
 `Core.Delete`, `Core.Archive`, `Core.Unarchive` and `Core.LoadAndUnarchive` (`pkg/beancore/core.go`) act on `c.root/<bean.Path>`, the main `.beans/`. They ignore `worktreeLinks`. For a worktree-linked bean, `Path` is relative to the worktree's `.beans/` (`loadBeanFrom`, `pkg/beancore/worktree_watcher.go`), and usually equals the main filename.

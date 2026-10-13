@@ -3,9 +3,10 @@
 title: RemoveLinksTo and FixBrokenLinks bypass Update's worktree routing
 status: todo
 type: bug
-priority: normal
+priority: low
 created_at: 2026-10-12T13:59:03Z
-updated_at: 2026-10-13T09:30:03Z
+updated_at: 2026-10-13T11:49:22Z
+parent: beans-oyic
 ---
 
 `Core.RemoveLinksTo` and `Core.FixBrokenLinks` (`pkg/beancore/links.go`) call `saveToDisk` for every bean they change. They ignore the routing that `Core.Update` applies: `Update` writes a worktree-linked bean into its worktree's `.beans/` and keeps a runtime-only (dirty) bean out of the main `.beans/`.
@@ -27,3 +28,13 @@ Except for `Archive`, no write method of `Core` calls `fanOut`, `Update` include
 - [ ] `go test ./...`
 
 Related: beans-qypq adds a file lock to every write path; one shared write helper leaves fewer paths to lock. `Delete`, `Archive` and `Unarchive` have the same routing gap for worktree-linked beans; that is beans-i0ag.
+
+## Reachability
+
+The bug is latent. `RemoveLinksTo` routes wrongly only in a `Core` whose `worktreeLinks` is set, i.e. in `beans serve`. The CLI never watches worktrees.
+
+- Beans UI: `DeleteBean` exists in `operations.graphql`, but no component calls it.
+- `beans delete` and `beans check --fix` run in a CLI `Core`.
+- A hand-written `deleteBean` request to `beans serve` reaches the bug.
+
+The bug becomes live once the UI calls `deleteBean`, or once `beans serve` calls `FixBrokenLinks`.
