@@ -5,11 +5,10 @@ status: todo
 type: bug
 priority: high
 created_at: 2026-10-12T08:42:53Z
-updated_at: 2026-10-13T11:53:44Z
+updated_at: 2026-10-13T12:01:18Z
 parent: beans-5txp
 blocked_by:
     - beans-26we
-    - beans-xg8t
 ---
 
 Bean writes are protected by `Core.mu`, a `sync.RWMutex`. It orders goroutines inside one process only. Several processes write the same `.beans/` files, and none of them coordinates with the others: there is no file lock and no single writer process. A bean can therefore change on disk between the moment a process reads it and the moment it writes it, and the compare-and-swap in `Core.Update` (beans-o1if) does not notice.
