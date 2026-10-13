@@ -1,11 +1,11 @@
 ---
 # beans-unjf
 title: Create misses cycles that its new links close
-status: todo
+status: scrapped
 type: bug
 priority: low
 created_at: 2026-10-12T10:03:37Z
-updated_at: 2026-10-12T10:03:37Z
+updated_at: 2026-10-13T09:30:03Z
 ---
 
 `CreateBean` (`pkg/beangraph/mutations.go:13`) rejects only the trivial cycle on a new bean: it blocks and is blocked by the same bean. It misses longer cycles. Example: `T blocking U` is stored; `beans create N --blocking T --blocked-by U` stores the cycle N → T → U → N.
@@ -20,3 +20,7 @@ A new bean cannot race with a concurrent writer into a cycle (no stored bean lin
 - [ ] Test: `create --blocking T --blocked-by U` with `T blocking U` stored is rejected; same for parent
 - [ ] Optional: make the update validators see all links of one request, so the resolver error appears before `Core.Update` and names the request
 - [ ] `go test ./...`
+
+## Reasons for Scrapping
+
+Merged into beans-26we as gap 3. beans-26we collects every check that relates a bean to other beans and moves it under the write lock; the create-time cycle check is one of them.

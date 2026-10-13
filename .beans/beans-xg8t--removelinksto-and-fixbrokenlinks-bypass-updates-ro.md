@@ -1,21 +1,29 @@
 ---
 # beans-xg8t
-title: RemoveLinksTo and FixBrokenLinks bypass Update's routing and events
+title: RemoveLinksTo and FixBrokenLinks bypass Update's worktree routing
 status: todo
 type: bug
 priority: normal
 created_at: 2026-10-12T13:59:03Z
-updated_at: 2026-10-12T13:59:03Z
+updated_at: 2026-10-13T09:30:03Z
 ---
 
-`Core.RemoveLinksTo` and `Core.FixBrokenLinks` (`pkg/beancore/links.go`) bypass the routing that `Core.Update` applies.
+`Core.RemoveLinksTo` and `Core.FixBrokenLinks` (`pkg/beancore/links.go`) call `saveToDisk` for every bean they change. They ignore the routing that `Core.Update` applies: `Update` writes a worktree-linked bean into its worktree's `.beans/` and keeps a runtime-only (dirty) bean out of the main `.beans/`.
 
-1. **Dirty and worktree-linked beans are written to the main `.beans/`.** Both methods call `saveToDisk` for every bean they change. `Core.Update` instead writes a worktree-linked bean to its worktree and keeps a runtime-only (dirty) bean out of the main directory. Deleting a bean in `beans serve` therefore writes the runtime state of every dirty bean that linked to it to main.
-2. **No subscriber events.** Neither method calls `fanOut`, so the Beans UI keeps showing the removed links until a watcher reload.
+## Effect
+
+In practice a bean is dirty only when the worktree watcher linked it to a worktree (`pkg/beancore/worktree_watcher.go`). No caller uses `WithPersist(false)`.
+
+Example: bean X is linked to worktree W and blocks bean Y. Deleting Y in `beans serve` runs `RemoveLinksTo(Y)`, which writes W's version of X into the main `.beans/`. The main watcher then loads that file and clears X's dirty flag. `worktreeLinks[X]` still points at W. Main now carries the worktree's unmerged state of X, and the Beans UI no longer shows X as dirty.
+
+## Events
+
+Except for `Archive`, no write method of `Core` calls `fanOut`, `Update` included. Subscribers receive a persisted write as the echo of the file watcher, about 100 ms later. A write routed into a worktree echoes through the worktree watcher. So `RemoveLinksTo` and `FixBrokenLinks` need no event of their own once they route like `Update`.
 
 ## Todo
 
-- [ ] Route each changed bean like `Core.Update` does (worktree link, dirty flag, persist), or call `Update` per bean
-- [ ] Send `EventUpdated` for every changed bean, after the lock is released
-- [ ] Tests: a dirty bean and a worktree-linked bean that link to a deleted bean; a subscriber receives the update
+- [ ] Route each changed bean like `Core.Update` does (worktree link, dirty flag, persist); preferably through one write helper that `Update` uses too
+- [ ] Tests: a worktree-linked bean that links to a deleted bean is written to its worktree, and the main file stays unchanged; same for `FixBrokenLinks`
 - [ ] `go test ./...`
+
+Related: beans-qypq adds a file lock to every write path; one shared write helper leaves fewer paths to lock. `Delete`, `Archive` and `Unarchive` have the same routing gap for worktree-linked beans; that is beans-i0ag.
