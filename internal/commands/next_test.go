@@ -92,9 +92,11 @@ func seedNextProject(t *testing.T, c *beancore.Core) {
 	mustCreate(t, c, &bean.Bean{ID: "e2", Title: "Epic two", Type: "epic", Status: "in-progress"})
 	mustCreate(t, c, &bean.Bean{ID: "t1", Title: "Task", Type: "task", Status: "todo", Parent: "e1"})
 	mustCreate(t, c, &bean.Bean{ID: "d2", Title: "Draft", Type: "task", Status: "draft", Parent: "e2"})
-	mustCreate(t, c, &bean.Bean{ID: "loose", Title: "Loose", Type: "task", Status: "todo"})
+	// Create stamps CreatedAt to the second, so a manual order fixes the
+	// rank of the two rest-lane tasks.
+	mustCreate(t, c, &bean.Bean{ID: "loose", Title: "Loose", Type: "task", Status: "todo", Order: "b"})
 	mustCreate(t, c, &bean.Bean{ID: "doing", Title: "Doing", Type: "task", Status: "in-progress", Parent: "e1"})
-	mustCreate(t, c, &bean.Bean{ID: "blocker", Title: "Blocker", Type: "task", Status: "todo"})
+	mustCreate(t, c, &bean.Bean{ID: "blocker", Title: "Blocker", Type: "task", Status: "todo", Order: "a"})
 	mustCreate(t, c, &bean.Bean{ID: "blocked", Title: "Blocked draft", Type: "task", Status: "draft", Parent: "e1", BlockedBy: []string{"blocker"}})
 }
 
@@ -141,6 +143,25 @@ func TestNextCommand(t *testing.T) {
 		nextAll = true
 		if err := nextCmd.RunE(nextCmd, nil); err == nil {
 			t.Error("--all with --in-progress: want error")
+		}
+	})
+
+	t.Run("without any front the rest lane is shown", func(t *testing.T) {
+		c, _ := setupNextTest(t)
+		mustCreate(t, c, &bean.Bean{ID: "e", Title: "Idle epic", Type: "epic", Status: "todo"})
+		mustCreate(t, c, &bean.Bean{ID: "a", Title: "A", Type: "task", Status: "todo", Parent: "e"})
+		mustCreate(t, c, &bean.Bean{ID: "b", Title: "B", Type: "task", Status: "todo"})
+		got := runNextJSON(t)
+		if got.Scope.Kind != "no-fronts" {
+			t.Errorf("scope = %+v, want no-fronts", got.Scope)
+		}
+		if ids := jsonRowIDs(got); len(ids) != 2 {
+			t.Errorf("rows = %v, want a and b", ids)
+		}
+		for _, r := range got.Rows {
+			if r.Lane != bean.LaneRest {
+				t.Errorf("%s: lane = %q, want rest", r.ID, r.Lane)
+			}
 		}
 	})
 
@@ -218,5 +239,43 @@ func TestFocusCommands(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, config.LocalConfigFileName)); !os.IsNotExist(err) {
 		t.Errorf("local file still present after clear: %v", err)
+	}
+
+	focusJSON = true
+	defer func() { focusJSON = false }()
+	var got focusJSONResult
+	decode := func(out string) {
+		t.Helper()
+		got = focusJSONResult{}
+		if err := json.Unmarshal([]byte(out), &got); err != nil {
+			t.Fatalf("%v\n%s", err, out)
+		}
+	}
+	out, err = run("set", "e2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	decode(out)
+	if got != (focusJSONResult{Focus: "e2", File: config.LocalConfigFileName}) {
+		t.Errorf("set --json = %+v", got)
+	}
+	stored, err := c.Get("e2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := stored.Clone()
+	done.Status = "completed"
+	if err := c.Update(done, stored.ETag()); err != nil {
+		t.Fatal(err)
+	}
+	out, _ = run()
+	decode(out)
+	if got.Focus != "e2" || got.Problem != "completed" {
+		t.Errorf("focus --json with stale focus = %+v", got)
+	}
+	out, _ = run("clear")
+	decode(out)
+	if got != (focusJSONResult{}) {
+		t.Errorf("clear --json = %+v", got)
 	}
 }

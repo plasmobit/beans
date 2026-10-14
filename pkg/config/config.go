@@ -313,7 +313,12 @@ func Load(configPath string) (*Config, error) {
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return Default(), nil
+			cfg := Default()
+			cfg.configDir = filepath.Dir(configPath)
+			if err := cfg.loadLocal(); err != nil {
+				return nil, err
+			}
+			return cfg, nil
 		}
 		return nil, err
 	}

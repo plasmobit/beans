@@ -79,7 +79,7 @@ func RankNext(candidates, all []*Bean, opts NextOptions) NextResult {
 		fronts = []*Bean{opts.Focus}
 	} else {
 		for _, b := range all {
-			if isContainerType(b.Type) && b.Status == "in-progress" {
+			if isContainerType(b.Type) && b.Status == "in-progress" && closedAncestor(b, byID) == nil {
 				fronts = append(fronts, b)
 			}
 		}
@@ -314,17 +314,26 @@ func FocusProblem(id string, all []*Bean) string {
 	if isClosedStatus(b.Status) {
 		return b.Status
 	}
+	if p := closedAncestor(b, byID); p != nil {
+		return fmt.Sprintf("ancestor %s is %s", p.ID, p.Status)
+	}
+	return ""
+}
+
+// closedAncestor returns the nearest completed or scrapped ancestor of b,
+// or nil.
+func closedAncestor(b *Bean, byID map[string]*Bean) *Bean {
 	seen := map[string]bool{b.ID: true}
 	for pid := b.Parent; pid != "" && !seen[pid]; {
 		seen[pid] = true
 		p, ok := byID[pid]
 		if !ok {
-			break
+			return nil
 		}
 		if isClosedStatus(p.Status) {
-			return fmt.Sprintf("ancestor %s is %s", p.ID, p.Status)
+			return p
 		}
 		pid = p.Parent
 	}
-	return ""
+	return nil
 }

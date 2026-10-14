@@ -1949,3 +1949,20 @@ func TestIgnoreLocalConfig(t *testing.T) {
 }
 
 func ptr(s string) *string { return &s }
+
+func TestLoadMissingFileUsesItsDirForLocalFocus(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, LocalConfigFileName), []byte("next:\n  focus: x-e1\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(filepath.Join(dir, ConfigFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id, src := cfg.Focus(); id != "x-e1" || src != LocalConfigFileName {
+		t.Errorf("Focus() = (%q, %q), want (x-e1, %s)", id, src, LocalConfigFileName)
+	}
+	if cfg.ConfigDir() != dir {
+		t.Errorf("ConfigDir() = %q, want %q", cfg.ConfigDir(), dir)
+	}
+}

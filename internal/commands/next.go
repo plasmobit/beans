@@ -23,7 +23,7 @@ var (
 
 // nextScope says where the fronts of `beans next` come from.
 type nextScope struct {
-	Kind  string `json:"kind"` // "focus" or "in-progress-fronts"
+	Kind  string `json:"kind"` // "focus", "in-progress-fronts" or "no-fronts"
 	Focus string `json:"focus,omitempty"`
 	File  string `json:"file,omitempty"`
 }
@@ -71,7 +71,7 @@ var nextCmd = &cobra.Command{
   interrupt  bugs with priority high or critical, anywhere in the tree
   focus      beans under a front
   refine     drafts under a front, to refine before they can start
-  rest       everything else (only with --all)
+  rest       everything else (only with --all, or when there is no front)
 
 A front is the focus set with "beans focus set", or else every
 in-progress milestone or epic.`,
@@ -102,8 +102,11 @@ in-progress milestone or epic.`,
 			TypeNames:     cfg.TypeNames(),
 		})
 
+		// Without any front every ready bean is in the rest lane, so hiding
+		// that lane would hide all work.
+		noFronts := len(result.Fronts) == 0
 		rows := result.Rows
-		if !nextAll {
+		if !nextAll && !noFronts {
 			kept := rows[:0:0]
 			for _, r := range rows {
 				if r.Lane != bean.LaneRest {
@@ -117,6 +120,9 @@ in-progress milestone or epic.`,
 		}
 
 		scope := nextScope{Kind: "in-progress-fronts"}
+		if noFronts {
+			scope = nextScope{Kind: "no-fronts"}
+		}
 		if focus.bean != nil {
 			scope = nextScope{Kind: "focus", Focus: focus.bean.ID, File: focus.source}
 		}
@@ -168,8 +174,11 @@ func nextCandidates(ctx context.Context, resolver *beangraph.CoreResolver) ([]*b
 }
 
 func (s nextScope) String() string {
-	if s.Kind == "focus" {
+	switch s.Kind {
+	case "focus":
 		return fmt.Sprintf("focus %s (%s)", s.Focus, s.File)
+	case "no-fronts":
+		return "no fronts – all ready beans"
 	}
 	return "in-progress fronts"
 }
@@ -226,7 +235,7 @@ func writeNextJSON(w io.Writer, resolver *beangraph.CoreResolver, scope nextScop
 
 func RegisterNextCmd(root *cobra.Command) {
 	nextCmd.Flags().BoolVar(&nextJSON, "json", false, "Output as JSON")
-	nextCmd.Flags().BoolVar(&nextAll, "all", false, "Also show beans outside every front (rest lane)")
+	nextCmd.Flags().BoolVar(&nextAll, "all", false, "Also show beans outside every front (rest lane; always shown when there is no front)")
 	nextCmd.Flags().BoolVar(&nextInProgress, "in-progress", false, "List in-progress beans to resume instead")
 	nextCmd.Flags().IntVar(&nextLimit, "limit", 10, "Maximum number of rows (0 = unlimited)")
 	root.AddCommand(nextCmd)

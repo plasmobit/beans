@@ -47,14 +47,14 @@ beans show --json <id> [id...]
 # List beans
 beans list --json                      # All beans
 beans list --json --ready              # Beans ready to start (not blocked, excludes in-progress/completed/scrapped/draft)
+beans list --json -t bug -s todo       # Filter by type and status
+beans list --json -S "authentication"  # Full-text search
+beans list --help                      # Full options
 
 # What to work on next
 beans next --json                      # Ranked: high/critical bugs, beans under the focus or in-progress epics/milestones, drafts to refine
 beans next --json --all                # Also beans outside every focus
-beans focus set <epic-or-milestone-id> # Rank this milestone's or epic's beans first (per user, .beans.local.yml)
-beans list --json -t bug -s todo       # Filter by type and status
-beans list --json -S "authentication"  # Full-text search
-beans list --help                      # Full options
+beans focus set --json <epic-or-milestone-id>  # Rank this milestone's or epic's beans first (per user, .beans.local.yml)
 
 # View beans (supports multiple IDs)
 beans show --json <id> [id...]

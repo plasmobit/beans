@@ -317,3 +317,15 @@ func TestFocusProblem(t *testing.T) {
 		}
 	}
 }
+
+func TestRankNextSkipsFrontsUnderClosedAncestor(t *testing.T) {
+	all := []*Bean{
+		{ID: "m", Type: "milestone", Status: "completed"},
+		{ID: "dead", Type: "epic", Status: "in-progress", Parent: "m"},
+		{ID: "live", Type: "epic", Status: "in-progress"},
+	}
+	got := rank(all, nil)
+	if len(got.Fronts) != 1 || got.Fronts[0].ID != "live" {
+		t.Errorf("fronts = %v, want only live", got.Fronts)
+	}
+}

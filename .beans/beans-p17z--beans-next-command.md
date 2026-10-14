@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: normal
 created_at: 2025-12-27T21:44:04Z
-updated_at: 2026-10-14T15:44:25Z
+updated_at: 2026-10-14T16:09:17Z
 order: VVg
 parent: beans-mmyp
 ---
@@ -96,3 +96,13 @@ TUI focus key and GraphQL exposure: see follow-up bean.
 - `beans next` (`--limit`, `--all`, `--in-progress`, `--json`) and `beans focus` / `focus set` / `focus clear`, with command tests.
 - `prompt.tmpl` points agents at `beans next --json`; `prime_test.go` checks that every command the prompt names exists.
 - JSON rows also carry `front` (the front's ID), beyond the spec's lane and reason.
+
+## Review (oc-review, ses_ec4e72108ffemt69EKWa47SrOj)
+
+- R1 no front hides all ready work: apply option A (rest lane shown when no front exists)
+- R2 `beans focus` lacks `--json` although the prompt promises it: apply, add `--json`
+- R3 prime_test misses bare command names and subcommands: apply
+- R4 next_test ordering depends on same-second CreatedAt: apply
+- R5 prime_test panics with -count=2 (flags registered twice): apply
+- R6 `--config` to a missing file ignores and misplaces .beans.local.yml: apply
+- R7 multi-front hint counts fronts under a closed ancestor: apply
