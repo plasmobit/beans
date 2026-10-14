@@ -11,3 +11,5 @@ _TODO.*
 # Embedded frontend (generated from frontend/build)
 /internal/web/dist/*
 !/internal/web/dist/.gitkeep
+# Per-user beans settings
+.beans.local.yml

@@ -989,3 +989,32 @@ func (c *Config) GetPreviewPosition() PreviewPosition {
 		return PreviewPositionAuto
 	}
 }
+
+// IgnoreLocalConfig appends LocalConfigFileName to dir/.gitignore unless a
+// line already names it. It creates the file when absent.
+func IgnoreLocalConfig(dir string) error {
+	path := filepath.Join(dir, ".gitignore")
+	data, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if l := strings.TrimSpace(line); l == LocalConfigFileName || l == "/"+LocalConfigFileName {
+			return nil
+		}
+	}
+	var add string
+	if len(data) > 0 && !strings.HasSuffix(string(data), "\n") {
+		add = "\n"
+	}
+	add += LocalConfigFileName + "\n"
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	if _, err := f.WriteString(add); err != nil {
+		f.Close()
+		return err
+	}
+	return f.Close()
+}

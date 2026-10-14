@@ -1913,3 +1913,39 @@ func TestSaveRoundTripsSharedFocus(t *testing.T) {
 		t.Errorf("Focus() = (%q, %q), want (x-e1, %s)", id, src, ConfigFileName)
 	}
 }
+
+func TestIgnoreLocalConfig(t *testing.T) {
+	tests := []struct {
+		name     string
+		existing *string
+		want     string
+	}{
+		{"creates missing file", nil, ".beans.local.yml\n"},
+		{"appends to file with newline", ptr("/dist/\n"), "/dist/\n.beans.local.yml\n"},
+		{"appends to file without newline", ptr("/dist/"), "/dist/\n.beans.local.yml\n"},
+		{"keeps existing entry", ptr("a\n.beans.local.yml\nb\n"), "a\n.beans.local.yml\nb\n"},
+		{"keeps rooted entry", ptr("/.beans.local.yml\n"), "/.beans.local.yml\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, ".gitignore")
+			if tt.existing != nil {
+				if err := os.WriteFile(path, []byte(*tt.existing), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			for range 2 {
+				if err := IgnoreLocalConfig(dir); err != nil {
+					t.Fatal(err)
+				}
+			}
+			got, _ := os.ReadFile(path)
+			if string(got) != tt.want {
+				t.Errorf(".gitignore = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func ptr(s string) *string { return &s }
