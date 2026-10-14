@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2025-12-27T21:44:04Z
-updated_at: 2026-10-14T15:37:14Z
+updated_at: 2026-10-14T15:38:39Z
 order: VVg
 parent: beans-mmyp
 ---
@@ -77,7 +77,7 @@ Flags:
 ## Todo
 
 - [x] Ranking in `pkg/bean/next.go` with table-driven tests (lanes incl. refine, front selection, ordering, nested fronts, parent with only a draft child)
-- [ ] Config: `next.focus` and `.beans.local.yml` merge, with tests
+- [x] Config: `next.focus` and `.beans.local.yml` merge, with tests
 - [ ] `beans init` appends `.beans.local.yml` to the root `.gitignore` (append-if-missing), with tests; add the line to this repo's `.gitignore`
 - [ ] `beans next` command with flags, scope header and multi-front hint
 - [ ] `beans focus` / `focus set` / `focus clear`

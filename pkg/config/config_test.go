@@ -1798,3 +1798,118 @@ server:
 		}
 	})
 }
+
+func TestFocus(t *testing.T) {
+	tests := []struct {
+		name       string
+		shared     string // .beans.yml content; "" means no file
+		local      string // .beans.local.yml content; "" means no file
+		wantID     string
+		wantSource string
+	}{
+		{"no focus anywhere", "beans:\n  prefix: x-\n", "", "", ""},
+		{"shared only", "next:\n  focus: x-e1\n", "", "x-e1", ConfigFileName},
+		{"local replaces shared", "next:\n  focus: x-e1\n", "next:\n  focus: x-e2\n", "x-e2", LocalConfigFileName},
+		{"local without shared file", "", "next:\n  focus: x-e2\n", "x-e2", LocalConfigFileName},
+		{"local file without the key", "next:\n  focus: x-e1\n", "other: 1\n", "x-e1", ConfigFileName},
+		{"local ignores other keys", "beans:\n  prefix: x-\n", "beans:\n  prefix: y-\nnext:\n  focus: x-e2\n", "x-e2", LocalConfigFileName},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if tt.shared != "" {
+				if err := os.WriteFile(filepath.Join(dir, ConfigFileName), []byte(tt.shared), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if tt.local != "" {
+				if err := os.WriteFile(filepath.Join(dir, LocalConfigFileName), []byte(tt.local), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			cfg, err := LoadFromDirectoryWithin(dir, dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			id, source := cfg.Focus()
+			if id != tt.wantID || source != tt.wantSource {
+				t.Errorf("Focus() = (%q, %q), want (%q, %q)", id, source, tt.wantID, tt.wantSource)
+			}
+			if tt.shared != "" && strings.Contains(tt.local, "prefix") && cfg.Beans.Prefix != "x-" {
+				t.Errorf("prefix = %q: local file must not override other keys", cfg.Beans.Prefix)
+			}
+		})
+	}
+}
+
+func TestSetAndClearLocalFocus(t *testing.T) {
+	dir := t.TempDir()
+	shared := filepath.Join(dir, ConfigFileName)
+	if err := os.WriteFile(shared, []byte("next:\n  focus: x-e1\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(shared)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := cfg.SetLocalFocus("x-e2"); err != nil {
+		t.Fatal(err)
+	}
+	reloaded, err := Load(shared)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id, src := reloaded.Focus(); id != "x-e2" || src != LocalConfigFileName {
+		t.Errorf("after set: Focus() = (%q, %q), want (x-e2, %s)", id, src, LocalConfigFileName)
+	}
+	sharedData, _ := os.ReadFile(shared)
+	if strings.Contains(string(sharedData), "x-e2") {
+		t.Errorf("SetLocalFocus wrote to %s", ConfigFileName)
+	}
+
+	if err := reloaded.ClearLocalFocus(); err != nil {
+		t.Fatal(err)
+	}
+	if id, src := reloaded.Focus(); id != "x-e1" || src != ConfigFileName {
+		t.Errorf("after clear: Focus() = (%q, %q), want (x-e1, %s)", id, src, ConfigFileName)
+	}
+	if err := reloaded.ClearLocalFocus(); err != nil {
+		t.Errorf("second clear: %v", err)
+	}
+}
+
+func TestSaveKeepsLocalFocusOut(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, LocalConfigFileName), []byte("next:\n  focus: x-local\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadFromDirectoryWithin(dir, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cfg.Save(dir); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(filepath.Join(dir, ConfigFileName))
+	if strings.Contains(string(data), "x-local") {
+		t.Errorf("Save wrote the local focus into %s:\n%s", ConfigFileName, data)
+	}
+}
+
+func TestSaveRoundTripsSharedFocus(t *testing.T) {
+	dir := t.TempDir()
+	cfg := Default()
+	cfg.SetConfigDir(dir)
+	cfg.Next.Focus = "x-e1"
+	if err := cfg.Save(dir); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := Load(filepath.Join(dir, ConfigFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id, src := loaded.Focus(); id != "x-e1" || src != ConfigFileName {
+		t.Errorf("Focus() = (%q, %q), want (x-e1, %s)", id, src, ConfigFileName)
+	}
+}

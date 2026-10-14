@@ -14,6 +14,9 @@ import (
 const (
 	// ConfigFileName is the name of the config file at project root
 	ConfigFileName = ".beans.yml"
+	// LocalConfigFileName is the per-user, gitignored file next to
+	// ConfigFileName. It carries only next.focus.
+	LocalConfigFileName = ".beans.local.yml"
 	// DefaultBeansPath is the default directory for storing beans
 	DefaultBeansPath = ".beans"
 	// LegacyConfigFile is the old config file location (deprecated)
@@ -164,6 +167,13 @@ type ServerConfig struct {
 	CORSOrigins []string `yaml:"cors_origins,omitempty"`
 }
 
+// NextConfig defines settings for `beans next`.
+type NextConfig struct {
+	// Focus is the ID of the milestone or epic whose children `beans next`
+	// ranks first. Empty: every in-progress milestone or epic is a front.
+	Focus string `yaml:"focus,omitempty"`
+}
+
 // TUIConfig defines settings for the terminal UI.
 type TUIConfig struct {
 	// StackedListHeight is the list pane height in terminal rows, border
@@ -200,6 +210,11 @@ type Config struct {
 	Agent    AgentConfig    `yaml:"agent,omitempty"`
 	Server   ServerConfig   `yaml:"server,omitempty"`
 	TUI      TUIConfig      `yaml:"tui,omitempty"`
+	Next     NextConfig     `yaml:"next,omitempty"`
+
+	// localFocus is next.focus from LocalConfigFileName; it replaces
+	// Next.Focus but is never saved to ConfigFileName.
+	localFocus *string
 
 	// configDir is the directory containing the config file (not serialized)
 	// Used to resolve relative paths
@@ -310,6 +325,9 @@ func Load(configPath string) (*Config, error) {
 
 	// Store the config directory for resolving relative paths
 	cfg.configDir = filepath.Dir(configPath)
+	if err := cfg.loadLocal(); err != nil {
+		return nil, err
+	}
 
 	// Apply defaults for missing values
 	if cfg.Beans.Path == "" {
@@ -346,10 +364,75 @@ func LoadFromDirectoryWithin(startDir, rootDir string) (*Config, error) {
 		// No config found, return default anchored at startDir
 		cfg := Default()
 		cfg.configDir = startDir
+		if err := cfg.loadLocal(); err != nil {
+			return nil, err
+		}
 		return cfg, nil
 	}
 
 	return Load(configPath)
+}
+
+// localConfig is the part of LocalConfigFileName that is read.
+type localConfig struct {
+	Next struct {
+		Focus *string `yaml:"focus"`
+	} `yaml:"next"`
+}
+
+func (c *Config) localConfigPath() string {
+	return filepath.Join(c.configDir, LocalConfigFileName)
+}
+
+func (c *Config) loadLocal() error {
+	data, err := os.ReadFile(c.localConfigPath())
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var local localConfig
+	if err := yaml.Unmarshal(data, &local); err != nil {
+		return fmt.Errorf("parsing %s: %w", LocalConfigFileName, err)
+	}
+	c.localFocus = local.Next.Focus
+	return nil
+}
+
+// Focus returns next.focus and the name of the file it came from. The
+// local file wins whenever it sets the key. An empty id means no focus.
+func (c *Config) Focus() (id, source string) {
+	if c.localFocus != nil {
+		return *c.localFocus, LocalConfigFileName
+	}
+	if c.Next.Focus != "" {
+		return c.Next.Focus, ConfigFileName
+	}
+	return "", ""
+}
+
+// SetLocalFocus writes next.focus to LocalConfigFileName.
+func (c *Config) SetLocalFocus(id string) error {
+	data, err := yaml.Marshal(map[string]map[string]string{"next": {"focus": id}})
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(c.localConfigPath(), data, 0644); err != nil {
+		return err
+	}
+	c.localFocus = &id
+	return nil
+}
+
+// ClearLocalFocus removes LocalConfigFileName, so next.focus from
+// ConfigFileName applies again.
+func (c *Config) ClearLocalFocus() error {
+	if err := os.Remove(c.localConfigPath()); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	c.localFocus = nil
+	return nil
 }
 
 // ResolveBeansPath returns the absolute path to the beans directory.
@@ -512,6 +595,13 @@ func (c *Config) toYAMLNode() *yaml.Node {
 		tuiMapping.Content = append(tuiMapping.Content, key, strNode(string(c.TUI.PreviewPosition)))
 	}
 
+	nextMapping := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+	if c.Next.Focus != "" {
+		key := strNode("focus")
+		key.HeadComment = "Milestone or epic that `beans next` ranks first (overridden by .beans.local.yml)"
+		nextMapping.Content = append(nextMapping.Content, key, strNode(c.Next.Focus))
+	}
+
 	// Build the top-level mapping
 	topMapping := &yaml.Node{
 		Kind:        yaml.MappingNode,
@@ -543,6 +633,10 @@ func (c *Config) toYAMLNode() *yaml.Node {
 
 	if len(tuiMapping.Content) > 0 {
 		topMapping.Content = append(topMapping.Content, strNode("tui"), tuiMapping)
+	}
+
+	if len(nextMapping.Content) > 0 {
+		topMapping.Content = append(topMapping.Content, strNode("next"), nextMapping)
 	}
 
 	// Wrap in a document node
