@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2025-12-27T21:44:04Z
-updated_at: 2026-10-14T15:39:19Z
+updated_at: 2026-10-14T15:43:16Z
 order: VVg
 parent: beans-mmyp
 ---
@@ -79,8 +79,8 @@ Flags:
 - [x] Ranking in `pkg/bean/next.go` with table-driven tests (lanes incl. refine, front selection, ordering, nested fronts, parent with only a draft child)
 - [x] Config: `next.focus` and `.beans.local.yml` merge, with tests
 - [x] `beans init` appends `.beans.local.yml` to the root `.gitignore` (append-if-missing), with tests; add the line to this repo's `.gitignore`
-- [ ] `beans next` command with flags, scope header and multi-front hint
-- [ ] `beans focus` / `focus set` / `focus clear`
+- [x] `beans next` command with flags, scope header and multi-front hint
+- [x] `beans focus` / `focus set` / `focus clear`
 - [ ] `prompt.tmpl`: "what to work on next" uses `beans next --json`; lines claiming `ready`/`next`/`start` commands name only existing commands; add a `prime_test.go` string check
 - [ ] Manual check on this repo: the 3 high bugs under `beans-5txp` rank first
 
