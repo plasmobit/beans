@@ -1,11 +1,11 @@
 ---
 # beans-p17z
 title: beans next command
-status: todo
+status: in-progress
 type: task
 priority: normal
 created_at: 2025-12-27T21:44:04Z
-updated_at: 2026-10-14T15:21:00Z
+updated_at: 2026-10-14T15:37:14Z
 order: VVg
 parent: beans-mmyp
 ---
@@ -76,7 +76,7 @@ Flags:
 
 ## Todo
 
-- [ ] Ranking in `pkg/bean/next.go` with table-driven tests (lanes incl. refine, front selection, ordering, nested fronts, parent with only a draft child)
+- [x] Ranking in `pkg/bean/next.go` with table-driven tests (lanes incl. refine, front selection, ordering, nested fronts, parent with only a draft child)
 - [ ] Config: `next.focus` and `.beans.local.yml` merge, with tests
 - [ ] `beans init` appends `.beans.local.yml` to the root `.gitignore` (append-if-missing), with tests; add the line to this repo's `.gitignore`
 - [ ] `beans next` command with flags, scope header and multi-front hint
