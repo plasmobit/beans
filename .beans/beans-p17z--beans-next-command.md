@@ -1,11 +1,11 @@
 ---
 # beans-p17z
 title: beans next command
-status: in-progress
+status: completed
 type: task
 priority: normal
 created_at: 2025-12-27T21:44:04Z
-updated_at: 2026-10-14T15:44:06Z
+updated_at: 2026-10-14T15:44:25Z
 order: VVg
 parent: beans-mmyp
 ---
@@ -82,8 +82,17 @@ Flags:
 - [x] `beans next` command with flags, scope header and multi-front hint
 - [x] `beans focus` / `focus set` / `focus clear`
 - [x] `prompt.tmpl`: "what to work on next" uses `beans next --json`; lines claiming `ready`/`next`/`start` commands name only existing commands; add a `prime_test.go` string check
-- [ ] Manual check on this repo: the 3 high bugs under `beans-5txp` rank first
+- [x] Manual check on this repo: the 3 high bugs under `beans-5txp` rank first
 
 ## Out of scope
 
 TUI focus key and GraphQL exposure: see follow-up bean.
+
+## Summary of Changes
+
+- `pkg/bean/next.go`: `RankNext` (lanes interrupt, focus, refine, rest, in-progress; front selection; ordering) and `FocusProblem`, with table-driven tests.
+- `pkg/config`: `next.focus` key; `.beans.local.yml` read next to the config dir (only `next.focus`); `Focus()` returns value and source; `SetLocalFocus` / `ClearLocalFocus`; `IgnoreLocalConfig`.
+- `beans init` appends `.beans.local.yml` to the project `.gitignore`; this repo's `.gitignore` has the entry.
+- `beans next` (`--limit`, `--all`, `--in-progress`, `--json`) and `beans focus` / `focus set` / `focus clear`, with command tests.
+- `prompt.tmpl` points agents at `beans next --json`; `prime_test.go` checks that every command the prompt names exists.
+- JSON rows also carry `front` (the front's ID), beyond the spec's lane and reason.
