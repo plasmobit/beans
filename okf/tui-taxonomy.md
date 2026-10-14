@@ -29,9 +29,12 @@ A view fills the terminal. `App.state` (type `viewState`, `internal/tui/tui.go`)
 | blocking picker | `viewBlockingPicker`, `blockingPickerModel` | `b` |
 | create modal | `viewCreateModal`, `createModalModel` | `c` |
 | help overlay | `viewHelpOverlay`, `helpOverlayModel` (`help.go`) | `?` |
+| settings overlay | `viewSettingsOverlay`, `settingsOverlayModel` (`settingsoverlay.go`) | `,` |
 
-The tag picker fills the terminal. The other pickers, the create modal and the help overlay are
-**modals**: `ModalView` draws them over the view they were opened from (`App.previousState`).
+The tag picker fills the terminal. The other pickers, the create modal, the help overlay and the
+settings overlay are **modals**: `ModalView` draws them, dimmed, over the view they were opened from
+(`App.previousState`). Over the list view, the background is the list view in its current layout
+(`renderListLayout`).
 
 ## Layouts of the list view
 
@@ -41,16 +44,26 @@ The tag picker fills the terminal. The other pickers, the create modal and the h
 | stacked layout | `isStackedMode`, `renderStackedView` | preview pane below the list pane |
 | single-column layout | neither of the above | list pane alone |
 
-**Preview position** (`App.previewPosition`, config `tui.preview_position`) chooses between the
-two-column and the stacked layout:
+**Preview position** (`tuiSettings.previewPosition`, config `tui.preview_position`) chooses between
+the two-column and the stacked layout:
 
 - `auto` selects by terminal size.
-- `right` and `below` force a layout; if it does not fit the terminal, the other layout applies, and
-  if neither fits, the single-column layout.
+- `right` forces the two-column layout; if it does not fit the terminal, the stacked layout applies,
+  and if that does not fit either, the single-column layout.
+- `below` forces the stacked layout while the list pane and the preview pane each get at least
+  `config.MinStackedListHeight` rows; otherwise the single-column layout applies.
 - The key `v` toggles between `right` and `below` until the TUI exits.
+
+The **preview ratio** (`tuiSettings.previewPercent`, default 50) is the preview pane's share of the
+height above the footer in the stacked layout. It applies only to position `below`, and it is kept
+on resize, so both pane heights follow the terminal height (`stackedListPaneHeight`). Positions
+`auto` and `right` give the stacked list pane the fixed height `tui.stacked_list_height`.
 
 The constants `TwoColumnFullWidth`, `TwoColumnMinWidth`, `StackedBelowListMinHeight` and the config
 `tui.stacked_list_height` set the size limits.
+
+The **settings overlay** (`,`) sets the preview position, the preview ratio and the view mode. Its
+settings last until the TUI exits; `.beans.yml` stays unchanged.
 
 ## Panes of the list view
 

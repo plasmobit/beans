@@ -351,8 +351,10 @@ func TestLayoutSelection(t *testing.T) {
 		{"right, narrow, tall falls back to below", right, TwoColumnMinWidth - 1, stackedMin, false, true},
 		{"right, narrow, short", right, TwoColumnMinWidth - 1, stackedMin - 1, false, false},
 		{"below, wide", below, TwoColumnFullWidth, stackedMin, false, true},
-		{"below, wide, short falls back to right", below, TwoColumnFullWidth, stackedMin - 1, true, false},
-		{"below, narrow, short", below, TwoColumnMinWidth - 1, stackedMin - 1, false, false},
+		{"below, wide, short stays below", below, TwoColumnFullWidth, stackedMin - 1, false, true},
+		{"below, narrow, room for both panes", below, TwoColumnMinWidth - 1, footerHeight + 2*config.MinStackedListHeight, false, true},
+		{"below, narrow, no room for the preview", below, TwoColumnMinWidth - 1, footerHeight + 2*config.MinStackedListHeight - 1, false, false},
+		{"below, wide, no room for the preview", below, TwoColumnFullWidth, footerHeight + 2*config.MinStackedListHeight - 1, false, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -372,6 +374,84 @@ func TestLayoutSelection(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestPreviewRatio(t *testing.T) {
+	items := []ui.FlatItem{{Bean: longBodyBean(50), Matched: true}}
+	auto, right, below := config.PreviewPositionAuto, config.PreviewPositionRight, config.PreviewPositionBelow
+	tests := []struct {
+		name          string
+		position      config.PreviewPosition
+		width, height int
+		percent       int
+		wantStacked   bool
+		wantList      int // list pane height, border included
+	}{
+		{"below, even split", below, 100, 40, 50, true, 20},
+		{"below, small preview", below, 100, 40, 20, true, 31},
+		{"below, large preview", below, 100, 40, 90, true, 5},
+		{"below, list clamped to minimum", below, 100, 20, 90, true, config.MinStackedListHeight},
+		{"below, preview clamped to minimum", below, 100, 40, 10, true, 40 - footerHeight - config.MinStackedListHeight},
+		{"below, wide terminal stays stacked", below, 200, 40, 50, true, 20},
+		{"below, too short for both panes", below, 100, 10, 50, false, 0},
+		{"auto ignores the ratio", auto, 100, 40, 90, true, config.DefaultStackedListHeight},
+		{"right fallback ignores the ratio", right, TwoColumnMinWidth - 1, 40, 90, true, config.DefaultStackedListHeight},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := New(nil, config.Default())
+			a.settings = tuiSettings{previewPosition: tt.position, previewPercent: tt.percent}
+			a.Update(tea.WindowSizeMsg{Width: tt.width, Height: tt.height})
+			a.Update(beansLoadedMsg{items: items, idColWidth: 12})
+
+			if got := a.isStackedMode(); got != tt.wantStacked {
+				t.Fatalf("isStackedMode() = %v, want %v", got, tt.wantStacked)
+			}
+			// The single-column layout keeps a spare row below the list.
+			wantHeight := tt.height
+			if !tt.wantStacked {
+				wantHeight -= listBottomPadding
+			}
+			if lines := strings.Split(ansi.Strip(a.View()), "\n"); len(lines) != wantHeight {
+				t.Errorf("view height = %d, want %d", len(lines), wantHeight)
+			}
+			if !tt.wantStacked {
+				return
+			}
+			if got := a.stackedListPaneHeight(); got != tt.wantList {
+				t.Errorf("list pane height = %d, want %d", got, tt.wantList)
+			}
+			wantPreview := tt.height - footerHeight - tt.wantList
+			if _, got := a.previewSize(); got != wantPreview {
+				t.Errorf("preview height = %d, want %d", got, wantPreview)
+			}
+		})
+	}
+}
+
+func TestPreviewRatioKeptOnResize(t *testing.T) {
+	items := []ui.FlatItem{{Bean: longBodyBean(50), Matched: true}}
+	a := New(nil, config.Default())
+	a.settings = tuiSettings{previewPosition: config.PreviewPositionBelow, previewPercent: 30}
+	a.Update(tea.WindowSizeMsg{Width: 100, Height: 41})
+	a.Update(beansLoadedMsg{items: items, idColWidth: 12})
+	if got, want := a.stackedListPaneHeight(), 28; got != want {
+		t.Fatalf("list pane height at 41 rows = %d, want %d", got, want)
+	}
+
+	a.Update(tea.WindowSizeMsg{Width: 100, Height: 21})
+	if a.settings.previewPercent != 30 {
+		t.Errorf("preview percent after resize = %d, want 30", a.settings.previewPercent)
+	}
+	if got, want := a.stackedListPaneHeight(), 14; got != want {
+		t.Errorf("list pane height at 21 rows = %d, want %d", got, want)
+	}
+	if _, h := a.previewSize(); h != 21-footerHeight-14 {
+		t.Errorf("preview height at 21 rows = %d, want %d", h, 21-footerHeight-14)
+	}
+	if lines := strings.Split(ansi.Strip(a.View()), "\n"); len(lines) != 21 {
+		t.Errorf("view height = %d, want 21", len(lines))
 	}
 }
 
@@ -395,7 +475,7 @@ func TestTogglePreviewPosition(t *testing.T) {
 	if got := len(lines); got != stackedMin {
 		t.Errorf("view height = %d, want %d", got, stackedMin)
 	}
-	if !strings.Contains(strings.Join(lines[a.stackedListHeight:], "\n"), "item 00") {
+	if !strings.Contains(strings.Join(lines[a.stackedListPaneHeight():], "\n"), "item 00") {
 		t.Errorf("after v: preview body not below the list\n%s", strings.Join(lines, "\n"))
 	}
 	if _, h := a.listPaneSize(); a.list.list.Height() != h {

@@ -32,6 +32,7 @@ const (
 	viewPriorityPicker
 	viewCreateModal
 	viewHelpOverlay
+	viewSettingsOverlay
 )
 
 // Pane geometry shared by the list and the preview.
@@ -138,15 +139,17 @@ type App struct {
 	priorityPicker priorityPickerModel
 	createModal    createModalModel
 	helpOverlay    helpOverlayModel
+	settingsModal  settingsOverlayModel
 	history        []detailModel // stack of previous detail views for back navigation
 	core           *beancore.Core
 	resolver       *beangraph.CoreResolver
 	config         *config.Config
 	width          int
 	height         int
-	// stackedListHeight is the list pane height in the stacked layout, border included.
+	// stackedListHeight is the configured list pane height in the stacked
+	// layout, border included; see stackedListPaneHeight.
 	stackedListHeight int
-	previewPosition   config.PreviewPosition
+	settings          tuiSettings
 	program           *tea.Program // reference to program for sending messages from watcher
 
 	// Key chord state - tracks partial key sequences like "g" waiting for "t"
@@ -172,8 +175,23 @@ func New(core *beancore.Core, cfg *config.Config) *App {
 		preview:  newPreviewModel(nil, 0, 0),
 
 		stackedListHeight: cfg.GetStackedListHeight(),
-		previewPosition:   cfg.GetPreviewPosition(),
+		settings: tuiSettings{
+			previewPosition: cfg.GetPreviewPosition(),
+			previewPercent:  DefaultPreviewPercent,
+		},
 	}
+}
+
+// stackedListPaneHeight returns the list pane height in the stacked layout,
+// border included. Position below splits the height by previewPercent, keeping
+// at least MinStackedListHeight rows for both the list and the preview.
+func (a *App) stackedListPaneHeight() int {
+	if a.settings.previewPosition != config.PreviewPositionBelow {
+		return a.stackedListHeight
+	}
+	panes := a.height - footerHeight
+	listHeight := (panes*(100-a.settings.previewPercent) + 50) / 100
+	return max(config.MinStackedListHeight, min(listHeight, panes-config.MinStackedListHeight))
 }
 
 // stackedMinHeight returns the minimum terminal height for the preview below the list.
@@ -188,15 +206,15 @@ func (a *App) Init() tea.Cmd {
 
 // isTwoColumnMode returns true if the list and preview are shown side by side.
 // In auto position, a shrunk side preview is used only when the terminal is
-// too short to stack.
+// too short to stack. Position below never shows two columns.
 func (a *App) isTwoColumnMode() bool {
 	fitsTwoColumn := a.width >= TwoColumnMinWidth
 	fitsStacked := a.height >= a.stackedMinHeight()
-	switch a.previewPosition {
+	switch a.settings.previewPosition {
 	case config.PreviewPositionRight:
 		return fitsTwoColumn
 	case config.PreviewPositionBelow:
-		return fitsTwoColumn && !fitsStacked
+		return false
 	}
 	return a.width >= TwoColumnFullWidth || (fitsTwoColumn && !fitsStacked)
 }
@@ -204,24 +222,33 @@ func (a *App) isTwoColumnMode() bool {
 // togglePreviewPosition moves the preview from the side to below the list, or back.
 func (a *App) togglePreviewPosition() {
 	if a.isTwoColumnMode() {
-		a.previewPosition = config.PreviewPositionBelow
+		a.settings.previewPosition = config.PreviewPositionBelow
 	} else {
-		a.previewPosition = config.PreviewPositionRight
+		a.settings.previewPosition = config.PreviewPositionRight
 	}
+	a.applyLayout()
+}
+
+// applyLayout resizes the preview and the list to the current layout.
+func (a *App) applyLayout() {
 	a.preview.width, a.preview.height = a.previewSize()
 	a.fitListToPane()
 }
 
 // isStackedMode returns true if the preview is shown below the list because
-// two columns are not chosen and the terminal is tall enough for both.
+// two columns are not chosen and the terminal is tall enough for both. For
+// position below, tall enough means room for both panes at minimum height.
 func (a *App) isStackedMode() bool {
+	if a.settings.previewPosition == config.PreviewPositionBelow {
+		return a.height-footerHeight >= 2*config.MinStackedListHeight
+	}
 	return !a.isTwoColumnMode() && a.height >= a.stackedMinHeight()
 }
 
 // previewSize returns the size the preview pane is rendered at.
 func (a *App) previewSize() (int, int) {
 	if a.isStackedMode() {
-		return min(a.width, StackedPreviewMaxWidth), a.height - a.stackedListHeight - footerHeight
+		return min(a.width, StackedPreviewMaxWidth), a.height - a.stackedListPaneHeight() - footerHeight
 	}
 	_, rightWidth := calculatePaneWidths(a.width)
 	return rightWidth, a.height - footerHeight
@@ -231,7 +258,7 @@ func (a *App) previewSize() (int, int) {
 // rendered at.
 func (a *App) listPaneSize() (int, int) {
 	if a.isStackedMode() {
-		return a.width, a.stackedListHeight - paneBorders
+		return a.width, a.stackedListPaneHeight() - paneBorders
 	}
 	if a.isTwoColumnMode() {
 		leftWidth, _ := calculatePaneWidths(a.width)
@@ -249,7 +276,7 @@ func (a *App) fitListToPane() {
 
 // Update handles messages
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
+	var cmd, inactiveCmd tea.Cmd
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -258,6 +285,19 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if a.isTwoColumnMode() || a.isStackedMode() {
 			a.preview.width, a.preview.height = a.previewSize()
+		}
+
+		// Only the active view receives the message below, so resize the
+		// inactive views too; a modal is drawn over them, and they render
+		// again once it closes.
+		if a.state != viewList {
+			a.list, inactiveCmd = a.list.Update(msg)
+			a.fitListToPane()
+		}
+		if a.state != viewDetail && a.detail.bean != nil {
+			var detailCmd tea.Cmd
+			a.detail, detailCmd = a.detail.Update(msg)
+			inactiveCmd = tea.Batch(inactiveCmd, detailCmd)
 		}
 
 	case tea.KeyMsg:
@@ -301,6 +341,17 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.state = viewHelpOverlay
 				return a, a.helpOverlay.Init()
 			}
+		case ",":
+			typingFilter := a.list.list.FilterState() == 1
+			if a.state == viewDetail {
+				typingFilter = a.detail.linksActive && a.detail.linkList.FilterState() == 1
+			}
+			if (a.state == viewList || a.state == viewDetail) && !typingFilter {
+				a.previousState = a.state
+				a.settingsModal = newSettingsOverlayModel(a.settings, a.list.viewMode, a.width, a.height)
+				a.state = viewSettingsOverlay
+				return a, nil
+			}
 		case "pgup", "pgdown":
 			// With a preview visible these scroll it; otherwise the list pages.
 			if a.state == viewList && a.list.list.FilterState() != 1 && (a.isTwoColumnMode() || a.isStackedMode()) {
@@ -319,7 +370,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return a, nil
 			}
 		case "q":
-			if a.state == viewDetail || a.state == viewTagPicker || a.state == viewParentPicker || a.state == viewStatusPicker || a.state == viewTypePicker || a.state == viewBlockingPicker || a.state == viewPriorityPicker || a.state == viewHelpOverlay {
+			if a.state == viewDetail || a.state == viewTagPicker || a.state == viewParentPicker || a.state == viewStatusPicker || a.state == viewTypePicker || a.state == viewBlockingPicker || a.state == viewPriorityPicker || a.state == viewHelpOverlay || a.state == viewSettingsOverlay {
 				return a, tea.Quit
 			}
 			// For list, only quit if not filtering
@@ -336,7 +387,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			paneWidth, innerHeight := a.listPaneSize()
 			overPreview := false
 			if a.isStackedMode() {
-				overPreview = msg.Y >= a.stackedListHeight
+				overPreview = msg.Y >= a.stackedListPaneHeight()
 			} else if a.isTwoColumnMode() {
 				overPreview = msg.X >= paneWidth
 			}
@@ -550,6 +601,19 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, a.helpOverlay.Init()
 
 	case closeHelpMsg:
+		a.state = a.previousState
+		return a, nil
+
+	case settingsChangedMsg:
+		a.settings = msg.settings
+		a.applyLayout()
+		if msg.viewMode != a.list.viewMode {
+			a.list.viewMode = msg.viewMode
+			return a, a.list.loadBeans
+		}
+		return a, nil
+
+	case closeSettingsMsg:
 		a.state = a.previousState
 		return a, nil
 
@@ -767,9 +831,11 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.createModal, cmd = a.createModal.Update(msg)
 	case viewHelpOverlay:
 		a.helpOverlay, cmd = a.helpOverlay.Update(msg)
+	case viewSettingsOverlay:
+		a.settingsModal, cmd = a.settingsModal.Update(msg)
 	}
 
-	return a, cmd
+	return a, tea.Batch(inactiveCmd, cmd)
 }
 
 // collectTagsWithCounts returns all tags with their usage counts
@@ -814,7 +880,7 @@ func (a *App) renderTwoColumnView() string {
 
 // renderStackedView renders the preview below a fixed-height list.
 func (a *App) renderStackedView() string {
-	listPane := a.list.ViewConstrained(a.width, a.stackedListHeight)
+	listPane := a.list.ViewConstrained(a.width, a.stackedListPaneHeight())
 	a.preview.width, a.preview.height = a.previewSize()
 	return listPane + "\n" + a.preview.View() + "\n" + a.list.Footer()
 }
@@ -823,13 +889,7 @@ func (a *App) renderStackedView() string {
 func (a *App) View() string {
 	switch a.state {
 	case viewList:
-		if a.isTwoColumnMode() {
-			return a.renderTwoColumnView()
-		}
-		if a.isStackedMode() {
-			return a.renderStackedView()
-		}
-		return a.list.View()
+		return a.renderListLayout()
 	case viewDetail:
 		return a.detail.View()
 	case viewTagPicker:
@@ -848,20 +908,29 @@ func (a *App) View() string {
 		return a.createModal.ModalView(a.getBackgroundView(), a.width, a.height)
 	case viewHelpOverlay:
 		return a.helpOverlay.ModalView(a.getBackgroundView(), a.width, a.height)
+	case viewSettingsOverlay:
+		return a.settingsModal.ModalView(a.getBackgroundView(), a.width, a.height)
 	}
 	return ""
 }
 
+// renderListLayout renders the list view in the layout that fits the terminal.
+func (a *App) renderListLayout() string {
+	if a.isTwoColumnMode() {
+		return a.renderTwoColumnView()
+	}
+	if a.isStackedMode() {
+		return a.renderStackedView()
+	}
+	return a.list.View()
+}
+
 // getBackgroundView returns the view to show behind modal pickers
 func (a *App) getBackgroundView() string {
-	switch a.previousState {
-	case viewList:
-		return a.list.View()
-	case viewDetail:
+	if a.previousState == viewDetail {
 		return a.detail.View()
-	default:
-		return a.list.View()
 	}
+	return a.renderListLayout()
 }
 
 // getEditor returns the user's preferred editor using the fallback chain:
