@@ -164,10 +164,6 @@ You can also add Beans-specific instructions to your `AGENTS.md`, `CLAUDE.md` or
 When making a commit, include the relevant bean IDs in the commit message
 ```
 
-## Contributing
-
-If you have suggestions or feedback, please [open an issue](https://github.com/plasmobit/beans/issues).
-
 ## Credits
 
 Beans was created by [Hendrik Mans](https://github.com/hmans). This fork builds on the original project, [hmans/beans](https://github.com/hmans/beans); all credit for the original design and implementation goes to him and its contributors.
@@ -175,7 +171,3 @@ Beans was created by [Hendrik Mans](https://github.com/hmans). This fork builds 
 ## License
 
 This project is licensed under the Apache-2.0 License. See the [LICENSE](LICENSE) file for details.
-
-## Getting in Touch
-
-If you have any questions, suggestions, or just want to say hi, please [open an issue](https://github.com/plasmobit/beans/issues) in this repository.
